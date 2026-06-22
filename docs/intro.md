@@ -83,7 +83,7 @@ the bottom of the stack and climb, gating each layer before the next:
 
 1. **Phase 0 — foundation.** Confirm a serial console that works with Wi-Fi down (the lifeline),
    `git init` the config-as-code repo, snapshot a base image.
-2. **Phase 1 — bare IP link (the first commit).** `hostapd.conf` (ch 36, country TW) + static
+2. **Phase 1 — bare IP link (the first commit).** `hostapd.conf` (ch 149, country TW) + static
    `192.168.4.1/24` on the drone; `wpa_supplicant.conf` (pinned BSSID, `bgscan=""`) + static `.2`
    on the ground; `power_save off` both ends. **Done when:** ping both ways, survives a reboot,
    and a forced `iw disconnect` recovers on its own.

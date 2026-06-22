@@ -24,7 +24,7 @@ gcs: Ground station {
 
 inet: Internet { shape: cloud; class: ext }
 
-drone.cc.wlan <-> gcs.wlan_g: 5 GHz · ch 36 (non-DFS) · 192.168.4.0/24
+drone.cc.wlan <-> gcs.wlan_g: 5 GHz · ch 149 (non-DFS) · 192.168.4.0/24
 gcs.wlan_g -> gcs.uplink: route + NAT
 gcs.uplink <-> inet: masquerade (opportunistic)
 

@@ -52,8 +52,7 @@ the radio off-air for a CAC period if it detects radar, i.e. link loss mid-fligh
 adds 100 ms-class latency/jitter as the radio naps between beacons. Both are unacceptable for a
 flight link, so both are removed at the physical/link layer. The specific channel is **149**
 (U-NII-3, 5745 MHz): non-DFS *and* outdoor-legal under TW NCC. An earlier draft used ch36, but
-that is U-NII-1 (5150–5250 MHz), typically indoor-only — wrong for an outdoor drone. (`intro.md`
-and `topology.d2` still say ch36 pending a diagram refresh.)
+that is U-NII-1 (5150–5250 MHz), typically indoor-only — wrong for an outdoor drone.
 
 **Network bring-up lives as a config module / Ansible role — not firmware, not its own repo
 (yet).** **[documented]** — kept maximally editable during the learning phase for iteration
