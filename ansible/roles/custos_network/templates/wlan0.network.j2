@@ -1,0 +1,14 @@
+[Match]
+Name=wlan0
+
+[Network]
+Address={{ custos_network_ip }}/{{ custos_network_prefix }}
+LinkLocalAddressing=no
+# Assign the static IP independent of carrier (AP: before hostapd raises it; STA: before
+# association) and keep it across deauth, so L3 is valid the instant 802.11 returns:
+ConfigureWithoutCarrier=yes
+IgnoreCarrierLoss=yes
+
+[Link]
+# Don't let systemd-networkd-wait-online hang the boot on wlan0.
+RequiredForOnline=no

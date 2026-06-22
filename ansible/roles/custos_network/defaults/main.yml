@@ -1,0 +1,18 @@
+---
+# custos_network role defaults — Phase 1 bare IP link.
+# The interface is hardcoded wlan0 throughout the role (see README); it is not a variable.
+custos_network_country: TW
+custos_network_ssid: custos-link
+custos_network_channel: 149
+custos_network_freq: 5745
+custos_network_vht_seg0: 155
+custos_network_prefix: 24
+
+# Dev PSK. Override with a vaulted `vault_wifi_psk` before any real deployment.
+custos_network_wifi_psk: "{{ vault_wifi_psk | default('custos-dev-changeme') }}"
+
+# Per-host values are provided in group_vars (intentionally not defaulted, so the role
+# asserts they are set):
+#   custos_network_role:     ap | sta
+#   custos_network_ip:       192.168.4.1 (ap) / 192.168.4.2 (sta)
+#   custos_network_ap_bssid: "aa:bb:cc:dd:ee:ff"  (sta only — the AP's wlan0 MAC)

@@ -7,9 +7,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# shellcheck source=../common/scripts/lib.sh
-. "$REPO_ROOT/common/scripts/lib.sh"
+# shellcheck source=lib.sh
+. "$SCRIPT_DIR/lib.sh"
 
 ROLE=""
 while [ $# -gt 0 ]; do

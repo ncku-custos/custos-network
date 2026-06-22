@@ -1,0 +1,6 @@
+---
+- name: Provision the Custos Phase 1 Wi-Fi link
+  hosts: custos
+  become: true
+  roles:
+    - custos_network

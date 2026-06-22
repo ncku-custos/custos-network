@@ -1,0 +1,32 @@
+---
+# Handler order matters: the daemon reload must precede the service restarts so systemd knows
+# the freshly-installed unit files.
+
+- name: Reload NetworkManager
+  ansible.builtin.systemd:
+    name: NetworkManager.service
+    state: reloaded
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# Apply the new .network to wlan0 ONLY — never `systemctl restart systemd-networkd`, which
+# re-applies every interface and can drop the control node's SSH on the mgmt NIC (S1).
+- name: Reconfigure wlan0
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - networkctl reload
+    - networkctl reconfigure wlan0
+  changed_when: false
+
+- name: Restart hostapd
+  ansible.builtin.systemd:
+    name: custos-hostapd.service
+    state: restarted
+
+- name: Restart wpa_supplicant
+  ansible.builtin.systemd:
+    name: wpa_supplicant@wlan0.service
+    state: restarted

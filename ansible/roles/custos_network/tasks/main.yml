@@ -1,0 +1,133 @@
+---
+- name: Validate role parameters
+  ansible.builtin.assert:
+    that:
+      - custos_network_role in ['ap', 'sta']
+      - custos_network_ip is defined
+    fail_msg: "Set custos_network_role (ap|sta) and custos_network_ip in group_vars."
+
+- name: Install Wi-Fi link packages
+  ansible.builtin.apt:
+    name:
+      - hostapd
+      - wpasupplicant
+      - iw
+      - rfkill
+    state: present
+  when: ansible_os_family == 'Debian'   # S4 — offline/non-Debian boards must pre-stage these
+
+# --- Hand wlan0 to networkd: stop NetworkManager and the plain wpa_supplicant from grabbing it ---
+- name: Detect NetworkManager
+  ansible.builtin.stat:
+    path: /usr/bin/nmcli
+  register: custos_network_nmcli
+
+- name: Unmanage wlan0 in NetworkManager
+  when: custos_network_nmcli.stat.exists   # S3 — only if NM is present
+  block:
+    - name: Ensure NetworkManager conf.d exists
+      ansible.builtin.file:
+        path: /etc/NetworkManager/conf.d
+        state: directory
+        mode: "0755"
+    - name: Drop the unmanaged-devices file
+      ansible.builtin.template:
+        src: 99-custos-unmanaged.conf.j2
+        dest: /etc/NetworkManager/conf.d/99-custos-unmanaged.conf
+        mode: "0644"
+      notify: Reload NetworkManager
+
+- name: Mask the non-instanced wpa_supplicant.service
+  ansible.builtin.systemd:
+    name: wpa_supplicant.service
+    masked: true
+    state: stopped
+
+- name: Mask the packaged hostapd.service (AP only)
+  ansible.builtin.systemd:
+    name: hostapd.service
+    masked: true
+    state: stopped
+  when: custos_network_role == 'ap'
+
+# Release wlan0 from NetworkManager BEFORE networkd takes it (avoids a two-manager race).
+- name: Apply NetworkManager + mask changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start systemd-networkd
+  ansible.builtin.systemd:
+    name: systemd-networkd.service
+    enabled: true
+    state: started
+
+# --- Common artifacts: the power-save/regdomain oneshot ---
+- name: Install the Wi-Fi tuning script
+  ansible.builtin.copy:
+    src: custos-wifi-tune
+    dest: /usr/local/sbin/custos-wifi-tune
+    mode: "0755"
+
+- name: Install the Wi-Fi tuning oneshot unit
+  ansible.builtin.copy:
+    src: custos-wifi-tune@.service
+    dest: /etc/systemd/system/custos-wifi-tune@.service
+    mode: "0644"
+  notify: Reload systemd daemon
+
+# --- Static IP via networkd ---
+- name: Configure the static IP on wlan0
+  ansible.builtin.template:
+    src: wlan0.network.j2
+    dest: "/etc/systemd/network/10-wlan0-{{ custos_network_role }}.network"
+    mode: "0644"
+  notify: Reconfigure wlan0
+
+# --- Role-specific config ---
+- name: Configure hostapd (AP)
+  when: custos_network_role == 'ap'
+  block:
+    - name: Template hostapd.conf
+      ansible.builtin.template:
+        src: hostapd.conf.j2
+        dest: /etc/hostapd/hostapd.conf
+        mode: "0644"
+      notify: Restart hostapd
+    - name: Install the custos-hostapd unit
+      ansible.builtin.copy:
+        src: custos-hostapd.service
+        dest: /etc/systemd/system/custos-hostapd.service
+        mode: "0644"
+      notify: Reload systemd daemon
+
+- name: Configure wpa_supplicant (STA)
+  when: custos_network_role == 'sta'
+  ansible.builtin.template:
+    src: wpa_supplicant-wlan0.conf.j2
+    dest: /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+    mode: "0644"
+  notify: Restart wpa_supplicant
+
+# Apply daemon-reload + the wlan0 reconfigure + service restarts before the enable checks.
+- name: Apply config changes now
+  ansible.builtin.meta: flush_handlers
+
+# --- Ensure enabled + running (idempotent after the restarts above) ---
+- name: Enable and start the Wi-Fi tuning oneshot
+  ansible.builtin.systemd:
+    name: custos-wifi-tune@wlan0.service
+    enabled: true
+    state: started
+
+- name: Enable and start hostapd (AP)
+  ansible.builtin.systemd:
+    name: custos-hostapd.service
+    enabled: true
+    state: started
+  when: custos_network_role == 'ap'
+
+- name: Enable and start wpa_supplicant (STA)
+  ansible.builtin.systemd:
+    name: wpa_supplicant@wlan0.service
+    enabled: true
+    state: started
+  when: custos_network_role == 'sta'

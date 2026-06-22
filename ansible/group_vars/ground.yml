@@ -1,0 +1,5 @@
+---
+custos_network_role: sta
+custos_network_ip: 192.168.4.2
+# Pin to the drone's real wlan0 MAC before bring-up (placeholder = the Phase 1 value):
+custos_network_ap_bssid: "00:11:22:33:44:55"
