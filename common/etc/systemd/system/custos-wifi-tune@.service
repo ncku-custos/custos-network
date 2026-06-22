@@ -1,0 +1,14 @@
+[Unit]
+Description=Custos Wi-Fi tuning (reg domain + power-save off) on %i
+After=sys-subsystem-net-devices-%i.device
+BindsTo=sys-subsystem-net-devices-%i.device
+# Must run before either daemon brings the radio up, so the radio is in TW + PS-off first.
+Before=custos-hostapd.service wpa_supplicant@%i.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/custos-wifi-tune %i
+
+[Install]
+WantedBy=multi-user.target

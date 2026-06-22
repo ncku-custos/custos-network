@@ -1,0 +1,33 @@
+# Topology — the deployment / network view (situational, promoted by Phase 0).
+# Physical nodes (devices, hosts) and the links between them, with addresses
+# and ports where they aid understanding. This is "where it runs and how it
+# reaches", NOT the logical decomposition (that is structure.d2).
+
+direction: right
+
+classes: {
+  ext: { style.fill: "#eeeeee"; style.stroke-dash: 3 }
+}
+
+drone: Drone (airframe) {
+  fc: Flight Controller · PX4
+  cc: Companion · NT98690 {
+    wlan: wlan0 — AP · 192.168.4.1
+  }
+  fc -> cc: UART / serial (wired)
+}
+
+gcs: Ground station {
+  wlan_g: wlan0 — STA · 192.168.4.2
+  uplink: eth0 / cellular (separate iface)
+}
+
+inet: Internet { shape: cloud; class: ext }
+
+drone.cc.wlan <-> gcs.wlan_g: 5 GHz · ch 36 (non-DFS) · 192.168.4.0/24
+gcs.wlan_g -> gcs.uplink: route + NAT
+gcs.uplink <-> inet: masquerade (opportunistic)
+
+ports: |md
+  **Ports on the link**: MAVLink UDP 14550 · RTP/H.265 5600 · Zenoh 7447
+| { near: bottom-center }

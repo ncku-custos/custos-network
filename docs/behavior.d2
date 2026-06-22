@@ -1,0 +1,46 @@
+# Behavior — the two defining runtime scenarios.
+# Each is a board under layers:. Scenario 1 is the happy path (the system's
+# reason for existing); scenario 2 is the recovery path where the design's
+# cleverness lives. Both are temporal (ordered messages), unlike Structure.
+
+layers: {
+  topic_to_ground: {
+    shape: sequence_diagram
+    ros2: ROS 2 app node
+    dds: CycloneDDS
+    zbridge: zenoh-bridge (drone)
+    wifi: 5 GHz link
+    zbridge_g: zenoh-bridge (gcs)
+    rviz: RViz
+
+    ros2 -> dds: publish topic (localhost)
+    dds -> zbridge: DDS sample
+    zbridge -> wifi: Zenoh / UDP (best-effort WMM)
+    wifi -> zbridge_g: deliver
+    zbridge_g -> rviz: re-inject & display
+    note: Only selected topics cross — full DDS discovery stays on localhost.
+  }
+
+  link_drop_recover: {
+    shape: sequence_diagram
+    mavr: mavlink-router
+    wifi: 5 GHz link
+    px4: Flight Controller · PX4
+    gcs: Ground station
+
+    group nominal: {
+      mavr -> wifi: telemetry + C2 (AC_VO)
+      wifi -> gcs: deliver
+    }
+    wifi -> wifi: association lost
+    group link down: {
+      mavr -> wifi: UDP keeps sending — frames just dropped
+      px4 -> px4: COM_RC_LOSS_T expires -> NAV_RCL_ACT (loiter / RTL)
+    }
+    wifi -> wifi: wpa_supplicant reassociates
+    group recovered: {
+      mavr -> gcs: telemetry resumes at once (static IP, no DHCP)
+    }
+    note: No session to rebuild — UDP goes quiet, never "disconnected".
+  }
+}

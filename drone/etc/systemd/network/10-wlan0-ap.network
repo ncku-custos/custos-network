@@ -1,0 +1,16 @@
+[Match]
+Name=wlan0
+
+[Network]
+Address=192.168.4.1/24
+# No gateway / DNS on the flight link in Phase 1.
+LinkLocalAddressing=no
+# hostapd raises carrier; without this networkd waits forever for carrier and never assigns
+# the IP at boot (the classic AP race). Configure regardless of carrier:
+ConfigureWithoutCarrier=yes
+# Keep the static IP across association churn so L3 is valid the instant 802.11 returns:
+IgnoreCarrierLoss=yes
+
+[Link]
+# Don't let systemd-networkd-wait-online hang the boot on wlan0.
+RequiredForOnline=no

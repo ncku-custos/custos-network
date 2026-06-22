@@ -1,0 +1,56 @@
+# Structure — the designed decomposition of the drone communication stack.
+# This is the conceptual shape (logical components & their dependencies),
+# NOT the file tree and NOT the physical host layout (see topology.d2).
+
+direction: right
+
+classes: {
+  external: { style.fill: "#eeeeee"; style.stroke-dash: 3 }
+  shared: { style.fill: "#fde8c8" }
+  app: { style.fill: "#d8f3dc" }
+}
+
+# --- boundary (external systems the stack touches) ---
+px4: Flight Controller · PX4 { class: external }
+camera: Camera { class: external }
+
+# --- the drone companion: where the three data planes originate ---
+drone: Drone companion · NT98690 {
+  ros2: ROS 2 app nodes { class: app }
+  dds: CycloneDDS (rmw, localhost-only)
+  zbridge: zenoh-bridge-ros2dds
+  mavr: mavlink-router
+  gst: GStreamer · H.265
+  net: Network provisioning · AP / static IP / QoS { class: shared }
+
+  ros2 -> dds: pub / sub
+  dds -> zbridge: selected topics
+  zbridge -> net: Zenoh / UDP
+  mavr -> net: MAVLink / UDP
+  gst -> net: RTP / UDP
+}
+
+# --- the ground station: mirror of the stack ---
+gcs: Ground station {
+  net_g: Network · STA { class: shared }
+  zbridge_g: zenoh-bridge-ros2dds
+  dds_g: CycloneDDS (rmw)
+  rviz: RViz / ROS tooling { class: app }
+  qgc: QGroundControl
+  vsink: Video sink
+
+  net_g -> zbridge_g
+  net_g -> qgc
+  net_g -> vsink
+  zbridge_g -> dds_g: re-inject
+  dds_g -> rviz: deliver
+}
+
+# --- the defining cross-boundary edges ---
+px4 -> drone.mavr: UART (serial)
+camera -> drone.gst: capture
+drone.net <-> gcs.net_g: single 5 GHz WiFi link
+
+legend: |md
+  **dashed** = external · **orange** = shared link substrate · **green** = code you write
+| { near: bottom-center }

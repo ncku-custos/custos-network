@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# custos-wifi-tune <iface>
+#
+# Installed to /usr/local/sbin and run at boot by custos-wifi-tune@<iface>.service,
+# ordered BEFORE hostapd / wpa_supplicant. Does the two things systemd-networkd cannot:
+#   1. set the regulatory domain (required for ch149 to be permitted)
+#   2. disable Wi-Fi power-save (PS-on adds ~100 ms jitter — unacceptable for a flight link)
+#
+# Self-contained on purpose: it runs from /usr/local/sbin and must not depend on the repo.
+set -euo pipefail
+
+IFACE="${1:?usage: custos-wifi-tune <iface>}"
+COUNTRY="TW"
+
+# A soft-blocked radio makes everything silently fail — clear it first.
+if command -v rfkill >/dev/null 2>&1; then
+  rfkill unblock wlan || true
+fi
+
+iw reg set "$COUNTRY"
+iw dev "$IFACE" set power_save off
+
+# Fail loud if power-save did not actually go off.
+ps_state="$(iw dev "$IFACE" get power_save 2>/dev/null | awk '{print $NF}')"
+if [ "$ps_state" != "off" ]; then
+  echo "custos-wifi-tune: power_save still '$ps_state' on $IFACE" >&2
+  exit 1
+fi
+
+echo "custos-wifi-tune: $IFACE reg=$COUNTRY power_save=off"

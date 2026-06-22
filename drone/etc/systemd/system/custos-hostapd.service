@@ -1,0 +1,18 @@
+[Unit]
+Description=Custos hostapd AP on wlan0 (Phase 1 bare IP link)
+# Tie lifecycle to the physical interface: start only once wlan0 exists, stop if it goes.
+BindsTo=sys-subsystem-net-devices-wlan0.device
+After=sys-subsystem-net-devices-wlan0.device
+# Radio must be in TW + power-save off before the AP comes up.
+Wants=custos-wifi-tune@wlan0.service
+After=custos-wifi-tune@wlan0.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/sbin/rfkill unblock wlan
+ExecStart=/usr/sbin/hostapd /etc/hostapd/hostapd.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
