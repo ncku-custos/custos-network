@@ -14,6 +14,8 @@
       - iw
       - rfkill
     state: present
+    update_cache: true
+    cache_valid_time: 3600
   when: ansible_os_family == 'Debian'   # S4 — offline/non-Debian boards must pre-stage these
 
 # --- Hand wlan0 to networkd: stop NetworkManager and the plain wpa_supplicant from grabbing it ---
@@ -74,6 +76,16 @@
     mode: "0644"
   notify: Reload systemd daemon
 
+# Set reg domain (TW) + power-save off BEFORE hostapd/wpa_supplicant come up, so the STA never
+# tries to associate on ch149 with the wrong regdomain. The AP pulls this in via Wants=, but
+# wpa_supplicant@wlan0 does not — so start it explicitly here, ahead of the restarts below.
+- name: Enable and start the Wi-Fi tuning oneshot
+  ansible.builtin.systemd:
+    name: custos-wifi-tune@wlan0.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
 # --- Static IP via networkd ---
 - name: Configure the static IP on wlan0
   ansible.builtin.template:
@@ -112,12 +124,6 @@
   ansible.builtin.meta: flush_handlers
 
 # --- Ensure enabled + running (idempotent after the restarts above) ---
-- name: Enable and start the Wi-Fi tuning oneshot
-  ansible.builtin.systemd:
-    name: custos-wifi-tune@wlan0.service
-    enabled: true
-    state: started
-
 - name: Enable and start hostapd (AP)
   ansible.builtin.systemd:
     name: custos-hostapd.service
