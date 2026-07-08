@@ -1,0 +1,5 @@
+---
+# Strictest built-in profile; the tree passes it clean — keep it that way.
+# skip_list intentionally empty. If a future ansible-lint bump demands role
+# metadata, add roles/custos_network/meta/main.yml rather than dropping the profile.
+profile: production

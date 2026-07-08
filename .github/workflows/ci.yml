@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Pinned deliberately — bump on purpose, not by surprise.
+      - name: Install ansible toolchain
+        run: pip install ansible-core==2.21.1 ansible-lint==26.4.0
+
+      # ansible-lint discovers the project from the git root — MUST run at repo root
+      # (from inside ansible/ it processes zero files). Profile comes from .ansible-lint.
+      - name: ansible-lint (production profile)
+        run: ansible-lint
+
+      # Proves the playbook parses under the repo's own ansible.cfg + inventory.
+      - name: Playbook syntax check
+        run: ansible-playbook site.yml --syntax-check
+        working-directory: ansible

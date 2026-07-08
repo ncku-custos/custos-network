@@ -130,7 +130,5 @@ NCC double-check before flight is still wise.
 
 - **Vault the PSK before leaving dev** — the guard and procedure are in place (see "The dev PSK
   is not a secret" above); creating the actual vault is the remaining deployment-time action.
-- **CI** — an `ansible-lint` + `--syntax-check` workflow (inline in this repo; the org's old
-  reusable-workflow repo is archived).
 - **Ground→internet NAT/uplink** — a separate `eth0`/cellular interface with masquerade, off the
   flight link, as a tagged optional task block in this role.
