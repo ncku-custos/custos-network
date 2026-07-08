@@ -1,0 +1,5 @@
+# Ansible local artifact/cache dirs (see ansible.cfg)
+.ansible/
+
+# Vault password material — never in git; the encrypted vault.yml itself IS committed.
+.vault-pass

@@ -4,7 +4,11 @@
     that:
       - custos_network_role in ['ap', 'sta']
       - custos_network_ip is defined
-    fail_msg: "Set custos_network_role (ap|sta) and custos_network_ip in group_vars."
+      # Outside dev, refuse to ship the committed dev PSK — vault a real one (see README).
+      - custos_network_env == 'dev' or custos_network_wifi_psk != 'custos-dev-changeme'
+    fail_msg: >-
+      Set custos_network_role (ap|sta) and custos_network_ip in group_vars.
+      With custos_network_env != 'dev', a vaulted vault_wifi_psk must replace the dev PSK.
 
 - name: Install Wi-Fi link packages
   ansible.builtin.apt:
@@ -102,7 +106,8 @@
       ansible.builtin.template:
         src: hostapd.conf.j2
         dest: /etc/hostapd/hostapd.conf
-        mode: "0644"
+        mode: "0600"          # holds the PSK — root-only
+      diff: false             # never print the rendered PSK in --diff runs
       notify: Restart hostapd
     - name: Install the custos-hostapd unit
       ansible.builtin.copy:
@@ -116,7 +121,8 @@
   ansible.builtin.template:
     src: wpa_supplicant-wlan0.conf.j2
     dest: /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
-    mode: "0644"
+    mode: "0600"              # holds the PSK — root-only
+  diff: false                 # never print the rendered PSK in --diff runs
   notify: Restart wpa_supplicant
 
 # Apply daemon-reload + the wlan0 reconfigure + service restarts before the enable checks.

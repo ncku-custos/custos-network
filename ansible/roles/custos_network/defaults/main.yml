@@ -11,6 +11,10 @@ custos_network_prefix: 24
 # Dev PSK. Override with a vaulted `vault_wifi_psk` before any real deployment.
 custos_network_wifi_psk: "{{ vault_wifi_psk | default('custos-dev-changeme') }}"
 
+# Deployment gate: any value other than 'dev' refuses to run with the dev PSK above
+# (see "Validate role parameters"). Set custos_network_env: prod in a real inventory.
+custos_network_env: dev
+
 # Per-host values are provided in group_vars (intentionally not defaulted, so the role
 # asserts they are set):
 #   custos_network_role:     ap | sta

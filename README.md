@@ -34,7 +34,18 @@ power-save **off** both ends. See "Radio channel" below.
 ## ⚠️ The dev PSK is not a secret
 
 The role's templates ship a development passphrase (`custos-dev-changeme`). **Rotate it before any
-real deployment** by setting a vaulted `vault_wifi_psk` (see "Next steps").
+real deployment**:
+
+```bash
+cd ansible
+ansible-vault create group_vars/custos/vault.yml   # add one line: vault_wifi_psk: "<real key>"
+ansible-playbook site.yml --ask-vault-pass          # or --vault-password-file .vault-pass (git-ignored)
+```
+
+The encrypted `vault.yml` is safe to commit. The role **refuses to run with the dev PSK** unless
+`custos_network_env` is `dev` (the default) — set `custos_network_env: prod` in a real inventory
+to arm the gate. PSK-bearing configs land as root-only (`0600`) and are excluded from `--diff`
+output, so the real key never prints.
 
 ## Provision (Ansible)
 
@@ -112,8 +123,9 @@ NCC double-check before flight is still wise.
 
 ## Next steps
 
-- **Vault the PSK** — `ansible-vault` a real key as `vault_wifi_psk` before leaving dev.
-- **CI** — an `ansible-lint` + `--syntax-check` workflow (the org keeps reusable workflows in
-  `custos-infra`).
+- **Vault the PSK before leaving dev** — the guard and procedure are in place (see "The dev PSK
+  is not a secret" above); creating the actual vault is the remaining deployment-time action.
+- **CI** — an `ansible-lint` + `--syntax-check` workflow (inline in this repo; the org's old
+  reusable-workflow repo is archived).
 - **Ground→internet NAT/uplink** — a separate `eth0`/cellular interface with masquerade, off the
   flight link, as a tagged optional task block in this role.
