@@ -20,3 +20,11 @@ custos_network_env: dev
 #   custos_network_role:     ap | sta
 #   custos_network_ip:       192.168.4.1 (ap) / 192.168.4.2 (sta)
 #   custos_network_ap_bssid: "aa:bb:cc:dd:ee:ff"  (sta only — the AP's wlan0 MAC)
+
+# --- Optional ground→internet NAT uplink (tags: nat). Default OFF: Phase 1 unchanged. ---
+# Enable for BOTH groups (ground gets the NAT machinery, drone gets the default route).
+custos_network_enable_nat: false
+custos_network_uplink_iface: eth0              # ground's internet-side iface (eth0/wwan0) — never wlan0
+custos_network_flight_subnet: 192.168.4.0/24   # kept explicit: no ipaddr filter without ansible.utils
+custos_network_gateway: 192.168.4.2            # drone's default route = the ground STA's flight IP
+custos_network_dns: [1.1.1.1, 9.9.9.9]         # drone resolvers when NAT is on (needs systemd-resolved)

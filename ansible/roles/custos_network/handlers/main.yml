@@ -30,3 +30,15 @@
   ansible.builtin.systemd:
     name: wpa_supplicant@wlan0.service
     state: restarted
+
+# Scoped to our file — `sysctl --system` would re-apply every file on the box.
+- name: Apply custos sysctl
+  ansible.builtin.command:
+    cmd: sysctl -p /etc/sysctl.d/90-custos-nat.conf
+  changed_when: false
+
+# `nft -f` is one atomic transaction — no delete/reload window, unlike restarting the unit.
+- name: Reload custos NAT rules
+  ansible.builtin.command:
+    cmd: nft -f /etc/custos-nat.nft
+  changed_when: false

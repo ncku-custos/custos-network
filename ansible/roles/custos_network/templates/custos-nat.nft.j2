@@ -1,0 +1,26 @@
+# Custos ground NAT — masquerade the flight subnet out the uplink.
+# Dedicated table, atomic declare-then-delete replace: idempotent on first load,
+# and `nft -f` re-applies it in one transaction with no delete/reload window.
+# Scoped by design — never touches other tables (ufw, Docker, iptables-nft).
+table ip custos_nat
+delete table ip custos_nat
+table ip custos_nat {
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        ip saddr {{ custos_network_flight_subnet }} oifname "{{ custos_network_uplink_iface }}" masquerade
+    }
+
+    # policy accept + scoped rules: a drop policy here would kill OTHER forwarding on
+    # this box (Docker bridges, libvirt) — nft requires acceptance in EVERY base chain.
+    # These rules control only traffic touching the flight link.
+    chain forward {
+        type filter hook forward priority filter; policy accept;
+        iifname "wlan0" oifname "{{ custos_network_uplink_iface }}" accept
+        iifname "{{ custos_network_uplink_iface }}" oifname "wlan0" ct state established,related accept
+        iifname "{{ custos_network_uplink_iface }}" oifname "wlan0" drop comment "no unsolicited ingress to the flight net"
+        iifname "wlan0" drop comment "flight net exits ONLY via the uplink"
+        oifname "wlan0" drop comment "nothing else forwards into the flight net"
+        # Cellular uplinks with a small MTU may need MSS clamping — uncomment if TCP stalls:
+        # oifname "{{ custos_network_uplink_iface }}" tcp flags syn tcp option maxseg size set rt mtu
+    }
+}

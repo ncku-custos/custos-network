@@ -6,9 +6,12 @@
       - custos_network_ip is defined
       # Outside dev, refuse to ship the committed dev PSK — vault a real one (see README).
       - custos_network_env == 'dev' or custos_network_wifi_psk != 'custos-dev-changeme'
+      # The NAT uplink must never be the flight radio itself.
+      - not (custos_network_enable_nat | bool) or custos_network_uplink_iface != 'wlan0'
     fail_msg: >-
       Set custos_network_role (ap|sta) and custos_network_ip in group_vars.
       With custos_network_env != 'dev', a vaulted vault_wifi_psk must replace the dev PSK.
+      With NAT enabled, custos_network_uplink_iface must not be wlan0.
 
 - name: Install Wi-Fi link packages
   ansible.builtin.apt:
@@ -91,12 +94,15 @@
     daemon_reload: true
 
 # --- Static IP via networkd ---
+# Tagged nat: the template carries the drone's conditional Gateway=/DNS=, so a
+# `--tags nat` run must deliver it too (assumes a previously fully-provisioned host).
 - name: Configure the static IP on wlan0
   ansible.builtin.template:
     src: wlan0.network.j2
     dest: "/etc/systemd/network/10-wlan0-{{ custos_network_role }}.network"
     mode: "0644"
   notify: Reconfigure wlan0
+  tags: [nat]
 
 # --- Role-specific config ---
 - name: Configure hostapd (AP)
@@ -143,3 +149,10 @@
     enabled: true
     state: started
   when: custos_network_role == 'sta'
+
+# --- Optional ground→internet NAT uplink (off by default; Phase 1 unchanged) ---
+# import_tasks (static) so the tag and condition propagate to every imported task.
+- name: Ground NAT uplink (custos_network_enable_nat)
+  ansible.builtin.import_tasks: nat.yml
+  when: custos_network_enable_nat | bool
+  tags: [nat]

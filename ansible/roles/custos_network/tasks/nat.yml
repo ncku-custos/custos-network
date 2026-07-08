@@ -1,0 +1,45 @@
+---
+# Ground→internet NAT uplink (custos_network_enable_nat, tags: nat).
+# Ground (STA) side only — the drone's half is the conditional Gateway=/DNS= in
+# wlan0.network.j2. Rules live in a dedicated `table ip custos_nat` loaded by our own
+# oneshot unit: nftables' multi-table semantics mean our accepts can never override
+# another firewall's drops, and we never touch their tables. Do NOT enable the distro
+# nftables.service — stock /etc/nftables.conf starts with `flush ruleset`.
+- name: Configure the ground-side NAT (STA)
+  when: custos_network_role == 'sta'
+  block:
+    - name: Install nftables
+      ansible.builtin.apt:
+        name: nftables
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == 'Debian'   # S4 — offline/non-Debian boards must pre-stage
+
+    - name: Enable IPv4 forwarding persistently
+      ansible.builtin.copy:
+        src: 90-custos-nat.conf
+        dest: /etc/sysctl.d/90-custos-nat.conf
+        mode: "0644"
+      notify: Apply custos sysctl
+
+    - name: Template the NAT ruleset
+      ansible.builtin.template:
+        src: custos-nat.nft.j2
+        dest: /etc/custos-nat.nft
+        mode: "0644"
+      notify: Reload custos NAT rules
+
+    - name: Install the custos-nat unit
+      ansible.builtin.copy:
+        src: custos-nat.service
+        dest: /etc/systemd/system/custos-nat.service
+        mode: "0644"
+      notify: Reload systemd daemon
+
+    - name: Enable and start custos-nat
+      ansible.builtin.systemd:
+        name: custos-nat.service
+        enabled: true
+        state: started
+        daemon_reload: true

@@ -1,0 +1,20 @@
+# Custos ground NAT rules (table ip custos_nat) — deliberately independent of the
+# distro nftables.service: stock /etc/nftables.conf begins with `flush ruleset`,
+# which would atomically destroy EVERY table on the box (ufw's, Docker's, ours).
+# Never enable nftables.service on these hosts; this unit loads only our table.
+[Unit]
+Description=Custos ground NAT rules (table ip custos_nat)
+Wants=network-pre.target
+Before=network-pre.target shutdown.target
+Conflicts=shutdown.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/custos-nat.nft
+ExecReload=/usr/sbin/nft -f /etc/custos-nat.nft
+ExecStop=-/usr/sbin/nft delete table ip custos_nat
+
+[Install]
+WantedBy=multi-user.target

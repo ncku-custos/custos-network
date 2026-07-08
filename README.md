@@ -11,7 +11,7 @@ no DHCP, no roaming — loss is made a non-event by removing state, not by addin
 Provisioning is an **Ansible role** (`ansible/roles/custos_network`).
 
 > **Status:** Phase 1 (the bare link), provisioned by Ansible. The ground→internet NAT/uplink is
-> deliberately deferred — see "Next steps".
+> implemented as an optional, off-by-default block — see "NAT uplink (optional)".
 
 ## The gate (definition of done)
 
@@ -93,6 +93,44 @@ sudo ./scripts/health-check.sh --role drone    # or --role ground
   pinned BSSID and ping resumes on its own, with the **static IP unchanged throughout** (proves
   `IgnoreCarrierLoss`). The truer RF-loss test is AP-side `hostapd_cli deauthenticate <mac>`.
 
+## NAT uplink (optional)
+
+Off by default; a plain Phase 1 run is byte-identical with the flag unset. Enabling
+`custos_network_enable_nat` (for **both** groups — uncomment it in `group_vars/*.yml`, or
+`-e custos_network_enable_nat=true`) adds:
+
+- **Ground (STA):** IPv4 forwarding + masquerade of `192.168.4.0/24` out
+  `custos_network_uplink_iface` (default `eth0`; override in host_vars for cellular). Rules live
+  in a dedicated nftables table (`custos_nat`) loaded by its own `custos-nat.service` — by
+  nftables semantics our accepts can never override another firewall's drops, and no other
+  table is touched. Forwarding is scoped: drone→internet out the uplink, only
+  `established,related` back in, everything else touching `wlan0` dropped.
+- **Drone (AP):** default route via `192.168.4.2` + DNS in the wlan0 `.network` file
+  (needs systemd-resolved for `DNS=`).
+
+```bash
+ansible-playbook site.yml -e custos_network_enable_nat=true              # full run
+ansible-playbook site.yml -e custos_network_enable_nat=true --tags nat   # NAT delta only
+                                          # (--tags nat assumes a previously provisioned host)
+```
+
+Verify: ground `nft list table ip custos_nat`, drone `ping -c3 1.1.1.1` (then a hostname to
+check DNS). Gotchas:
+
+- **ufw/Docker on the ground box:** their FORWARD drop policies still apply — our rules
+  deliberately don't override them (that deference is the point). Allow the path there too,
+  e.g. `ufw route allow in on wlan0 out on eth0`.
+- **Never enable the distro `nftables.service`** on these hosts — stock `/etc/nftables.conf`
+  begins with `flush ruleset`, which would destroy every table on the box (ours, ufw's,
+  Docker's). `custos-nat.service` is deliberately independent of it.
+- **Bench provisioning:** the drone's metric-0 `Gateway=` beats a DHCP default route on bench
+  Ethernet, so with NAT on, the drone's internet rides the flight link even on the bench.
+- Cellular uplinks with small MTUs: uncomment the MSS-clamp line in `custos-nat.nft.j2`.
+- `health-check.sh` has no NAT checks yet (its gates are link-layer); verify NAT manually as
+  above for now.
+- The role is additive: turning the flag back off skips the tasks but removes nothing — see
+  uninstall below.
+
 ## To uninstall
 
 The role copies files into `/etc` (it does not symlink). To revert a box:
@@ -101,6 +139,11 @@ The role copies files into `/etc` (it does not symlink). To revert a box:
 remove `/etc/hostapd/hostapd.conf`, `/etc/systemd/network/10-wlan0-*.network`,
 `/etc/systemd/system/custos-{hostapd,wifi-tune@}.service`, `/usr/local/sbin/custos-wifi-tune`, and
 `/etc/NetworkManager/conf.d/99-custos-unmanaged.conf`; then `sudo systemctl daemon-reload`.
+
+If NAT was enabled, additionally (ground): `sudo systemctl disable --now custos-nat.service`
+(its `ExecStop` deletes the nft table); remove `/etc/systemd/system/custos-nat.service`,
+`/etc/custos-nat.nft`, and `/etc/sysctl.d/90-custos-nat.conf`; `sudo sysctl -w net.ipv4.ip_forward=0`
+if nothing else needs forwarding.
 
 ## Radio channel
 
@@ -130,5 +173,6 @@ NCC double-check before flight is still wise.
 
 - **Vault the PSK before leaving dev** — the guard and procedure are in place (see "The dev PSK
   is not a secret" above); creating the actual vault is the remaining deployment-time action.
-- **Ground→internet NAT/uplink** — a separate `eth0`/cellular interface with masquerade, off the
-  flight link, as a tagged optional task block in this role.
+- **Fill real identity values** — copy the `host_vars/*.yml.example` overlays (mgmt IPs, the
+  drone's wlan0 MAC) and run the three gate tests on hardware.
+- **health-check `--nat` mode** — once the NAT uplink is used in anger.

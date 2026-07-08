@@ -67,8 +67,9 @@ no long video GOP. The link is made tolerant by removing state, not adding recov
 ![Topology](topology.svg)
 
 The physical/network view: the PX4 flight controller wired to the NT98690 companion over UART;
-the companion as a `192.168.4.1` access point; the ground station associating at `.2` and
-NAT-routing the drone to the internet through a *separate* uplink. This is promoted because the
+the companion as a `192.168.4.1` access point; the ground station associating at `.2` and —
+when the optional NAT block is enabled — routing the drone to the internet through a *separate*
+uplink. This is promoted because the
 project's deployment difficulty — single-PHY radio roles, addressing, the one shared link — is
 real and invisible to the logical Structure view.
 **What to notice:** the only wired hop is FC↔companion; every other link is the one contended
@@ -78,8 +79,9 @@ real and invisible to the logical Structure view.
 
 ## Entrypoints — where to start building
 
-This project is at progress 0; the entrypoint is the build sequence, not a `main()`. Start at
-the bottom of the stack and climb, gating each layer before the next:
+The entrypoint is the build sequence, not a `main()` — Phase 1 and its Ansible role are in the
+repo; later phases stack on top. Start at the bottom of the stack and climb, gating each layer
+before the next:
 
 1. **Phase 0 — foundation.** Confirm a serial console that works with Wi-Fi down (the lifeline),
    `git init` the config-as-code repo, snapshot a base image.

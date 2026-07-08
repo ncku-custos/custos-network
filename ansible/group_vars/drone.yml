@@ -1,3 +1,5 @@
 ---
 custos_network_role: ap
 custos_network_ip: 192.168.4.1
+# NAT uplink: enable for BOTH groups (drone gets the default route via the ground STA):
+# custos_network_enable_nat: true

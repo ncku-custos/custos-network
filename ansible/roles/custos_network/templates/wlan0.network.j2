@@ -8,6 +8,14 @@ LinkLocalAddressing=no
 # association) and keep it across deauth, so L3 is valid the instant 802.11 returns:
 ConfigureWithoutCarrier=yes
 IgnoreCarrierLoss=yes
+{% if custos_network_role == 'ap' and custos_network_enable_nat | bool %}
+# NAT uplink (custos_network_enable_nat): internet routes via the ground STA.
+# IgnoreCarrierLoss keeps this route across deauth — zero reprogramming on re-associate.
+Gateway={{ custos_network_gateway }}
+{% for server in custos_network_dns %}
+DNS={{ server }}
+{% endfor %}
+{% endif %}
 
 [Link]
 # Don't let systemd-networkd-wait-online hang the boot on wlan0.
