@@ -1,0 +1,6 @@
+---
+# Copy to drone-01.yml (git-ignored) and fill in real values.
+# host_vars outranks the inventory.ini placeholders — no -e / -i juggling needed.
+
+# Management IP for provisioning — wired bench Ethernet / USB-NIC, NEVER 192.168.4.1.
+ansible_host: 10.0.0.10

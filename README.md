@@ -57,12 +57,17 @@ restarts `wlan0`; a control connection riding it would be cut mid-run. Set each 
 `ansible_host` (in `ansible/inventory.ini`) to a **management IP** — the ground's `eth0`/cellular
 uplink, or a **wired bench Ethernet** on the drone during provisioning — **never `192.168.4.1/.2`**.
 
+Real identity values (mgmt IPs, the drone's wlan0 MAC) live in **git-ignored `host_vars/`
+overlays**, which outrank the committed placeholders in `inventory.ini`/`group_vars` — real
+BSSIDs and addresses never enter git:
+
 ```bash
 cd ansible
-# 1. edit inventory.ini: set ansible_host (mgmt IPs) and ansible_user
-# 2. (ground) set the drone's wlan0 MAC in group_vars/ground.yml -> custos_network_ap_bssid
-#    (read it on the drone: `ip link show wlan0`; for the very first association you may
-#     blank the bssid, connect by SSID, then pin it)
+# 1. copy host_vars/drone-01.yml.example -> host_vars/drone-01.yml; set the mgmt IP.
+#    Same for ground-01: mgmt IP + the drone's wlan0 MAC (custos_network_ap_bssid —
+#    read it on the drone: `ip link show wlan0`; for the very first association you may
+#    blank the bssid, connect by SSID, then pin it)
+# 2. edit inventory.ini: set ansible_user
 ansible-playbook site.yml                 # provisions both groups
 ansible-playbook site.yml --limit drone   # or one group at a time
 ```

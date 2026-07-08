@@ -3,3 +3,8 @@
 
 # Vault password material — never in git; the encrypted vault.yml itself IS committed.
 .vault-pass
+
+# Real per-host identity (mgmt IPs, the AP's BSSID) stays out of git — copy the
+# committed *.example files, strip the suffix, fill in real values.
+ansible/host_vars/*
+!ansible/host_vars/*.example
