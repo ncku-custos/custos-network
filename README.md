@@ -71,12 +71,22 @@ are excluded from `--diff` output, so the real key never prints.
 
 The role templates the configs, hands the flight interface to systemd-networkd (unmanaging
 NetworkManager), installs the units, and enables everything — idempotently. Only the flight NIC
-is touched; uplink/management NICs are never reconfigured.
+is **reconfigured**, but two actions are inherently machine-wide, so know their edges:
+
+- On NetworkManager systems the shared `wpa_supplicant.service` — which carries **every** NM
+  WiFi connection, uplink/hotspot included — is left running; the flight NIC is kept away from
+  NM by an `unmanaged-devices` conf instead. On **NM-less** boxes that unit is stopped and
+  masked: if mgmt WiFi there rides it, it will be cut — use wired mgmt or a
+  `wpa_supplicant@<mgmt-iface>` instance instead.
+- The regulatory domain (`iw reg set`) is machine-global — see the field-setup notes.
 
 ⚠️ **Run from a control node over a management path — never over the flight interface.** The role
 restarts it; a control connection riding it would be cut mid-run. Set each host's `ansible_host`
 to a **management IP** — the ground's ethernet/cellular uplink, or a **wired bench Ethernet** on
-the drone during provisioning — **never `192.168.4.1/.2`**.
+the drone during provisioning — **never `192.168.4.1/.2`**. The role asserts this: it refuses to
+run when `ansible_host` is an address on the flight interface (override with
+`custos_network_allow_flight_mgmt=true` if you accept the mid-run drop; a hostname resolving to a
+flight IP is *not* caught — use IPs).
 
 ```bash
 cd ansible
@@ -120,12 +130,16 @@ link). Notes:
 
 - **Tethering must be up before the run** — the uplink NIC has to exist for the nft rules to bind
   names at load; the connection can drop and return afterwards.
-- **This is safe to run from the laptop itself** because the role only touches the flight NIC —
-  the tether/hotspot uplink and any other NICs keep working throughout.
+- **Safe to run from the laptop itself**: with NetworkManager present the role never stops the
+  shared `wpa_supplicant.service` (which carries the built-in-WiFi/hotspot uplink) — the flight
+  NIC is excluded via `unmanaged-devices` instead — and a preflight assert refuses to run at all
+  if `ansible_host` sits on the flight interface.
 - **MSS clamping is on by default** (`custos_network_clamp_mss`) — phone/cellular uplinks have
   small MTUs; without the clamp, TCP through the NAT stalls.
-- **Regulatory domain is machine-global**: `iw reg set` also constrains the uplink radio. Set
-  `custos_network_country` for your jurisdiction.
+- **Regulatory domain is machine-global**: `iw reg set` reshapes the allowed channels of the
+  **uplink radio too**, and can knock it off a channel that is illegal under the new country.
+  Set `custos_network_country` for your jurisdiction *before* field use (the tuning oneshot
+  skips the set when the domain already matches, so boots and re-runs don't churn it).
 
 ## Verify
 
@@ -180,6 +194,9 @@ check DNS). Gotchas:
   Docker's). `custos-nat.service` is deliberately independent of it.
 - **Bench provisioning:** the drone's metric-0 `Gateway=` beats a DHCP default route on bench
   Ethernet, so with NAT on, the drone's internet rides the flight link even on the bench.
+- **`ip_forward=1` is machine-global:** with no other firewall the ground box will also forward
+  between its *other* interfaces (Docker/LXD hosts already run this way) — the custos nft table
+  only guards traffic touching the flight net.
 - `health-check.sh` has no NAT checks yet (its gates are link-layer); verify NAT manually as
   above for now.
 - The role is additive: turning the flag back off skips the tasks but removes nothing — see
@@ -216,17 +233,31 @@ consistency.
 
 ## Gotchas
 
-- **NetworkManager vs networkd** — NM is present on these MediaTek boards; the role drops an
-  `unmanaged-devices` conf for the flight interface (when NM is present) and masks the
-  non-instanced `wpa_supplicant.service`. Without this, hostapd/wpa_supplicant hit "Device or
-  resource busy".
+- **NetworkManager vs networkd** — where NM is present, the `unmanaged-devices` conf is what
+  keeps NM (and its supplicant) off the flight interface — without it, hostapd/wpa_supplicant
+  hit "Device or resource busy". The shared `wpa_supplicant.service` is **left running** there:
+  it carries every NM WiFi connection, and stopping it once cut a field laptop's uplink. It is
+  stopped+masked only on NM-less boxes. Recovering a box hit by the old unconditional mask:
+  `sudo systemctl unmask wpa_supplicant.service && sudo systemctl start wpa_supplicant.service`,
+  then reconnect WiFi.
 - **Don't reconfigure networkd over the mgmt link** — the role uses
   `networkctl reconfigure <flight-iface>` (not a full `systemctl restart systemd-networkd`, which
   re-applies every interface and could drop the control node's SSH).
 - **hostapd↔networkd boot race (AP)** — solved by `ConfigureWithoutCarrier=yes` on the AP
   `.network` plus `BindsTo` the flight-interface device on the hostapd unit.
-- **MT7922 AP mode** — VHT80 is solid; AX/HE160 are flaky and left off. Fallback is HT40
-  (`vht_oper_chwidth=0`). Check firmware with `dmesg | grep mt7921`.
+- **MT7922 AP mode** — AX/HE160 are flaky and left off. Check firmware with `dmesg | grep mt7921`.
+- **VHT80 ↔ RTL8822BU black hole** — with an `mt7921e` AP and an RTL8822BU USB adapter
+  (`rtw88_8822bu`) as the ground STA, AP→STA frames larger than **~900 bytes** are mostly lost
+  once a TCP connection has carried data: ping and the SSH banner work, then the session hangs at
+  `SSH2_MSG_KEXINIT sent` (the server's KEXINIT is ~1040 B). The loss is intermittent, and SSH
+  compounds it — measured **1/6** SSH sessions at VHT80 vs **6/6** at HT40. The AP's TX counters
+  increment with zero errors and the STA reports no drops; the frames simply never arrive. Not an
+  MTU or DSCP issue, and not SSH-specific — any >900 B reply after a client write reproduces it.
+  The fault is the STA's receive path: the same AP at VHT80 passes 20/20 probes to an mt7922
+  (mt76) STA at 780 Mbit/s. Set `custos_network_vht: false` (defaults commented in
+  `group_vars/custos/main.yml`, or per-AP in its `host_vars` overlay) for HT40 only; peak PHY
+  drops ~867 → ~270 Mbit/s, still far above what the flight link needs. Leave it `true` when the
+  ground STA is an mt76-class radio.
 - **Regulatory** — wrong regdomain → ch149 refused. Belt-and-suspenders: the oneshot runs
   `iw reg set` (country from `/etc/custos-network.env`), hostapd sets `country_code`, and
   `ieee80211d=1` advertises it to the STA.

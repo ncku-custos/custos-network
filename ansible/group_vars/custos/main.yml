@@ -9,3 +9,10 @@
 # Ground→internet NAT uplink — this one line arms BOTH groups (drone default
 # route, ground forwarding + masquerade out custos_network_uplink_iface):
 # custos_network_enable_nat: true
+
+# Drop the AP to HT40 when the ground STA's driver mishandles VHT80 (measured:
+# an RTL8822BU/rtw88_8822bu STA loses most AP→STA frames over ~900 B, so SSH and
+# bulk traffic hang while ping still works). Costs peak PHY rate, ~867 →
+# ~270 Mbit/s. Per-fleet radio facts can also live in the drone's git-ignored
+# host_vars overlay. See README "Gotchas".
+# custos_network_vht: false

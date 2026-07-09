@@ -9,7 +9,12 @@ After=custos-wifi-tune@{{ custos_network_flight_iface }}.service
 
 [Service]
 Type=simple
-ExecStartPre=/usr/sbin/rfkill unblock wlan
+# Deliberately type-wide (unlike custos-wifi-tune's phy-scoped unblock): this unit
+# only runs on the drone AP, which has a single radio — robustness wins here.
+# '-' prefix: rfkill is best-effort. Vendor kernels without CONFIG_RFKILL have no
+# /dev/rfkill, so this exits 1 — and hostapd itself tolerates that (it warns and
+# comes up). A real soft-block still surfaces as a loud hostapd failure.
+ExecStartPre=-/usr/sbin/rfkill unblock wlan
 ExecStart=/usr/sbin/hostapd /etc/hostapd/hostapd.conf
 Restart=on-failure
 RestartSec=2

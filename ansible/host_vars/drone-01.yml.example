@@ -14,3 +14,8 @@ ansible_host: 10.0.0.10
 
 # Flight radio interface (default wlan0; set if the NIC enumerates as wlp*/wlx* — `ip link`):
 # custos_network_flight_iface: wlan0
+
+# AP radio width. Set false for HT40-only when the GROUND station's driver mishandles
+# VHT80 — e.g. RTL8822BU/rtw88_8822bu silently drops AP→STA frames over ~900 B, which
+# hangs ssh while ping still works. See README "Gotchas".
+# custos_network_vht: false

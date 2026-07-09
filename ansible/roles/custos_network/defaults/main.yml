@@ -6,6 +6,11 @@
 # (systemd unit-name escaping); real NIC names never have them.
 custos_network_flight_iface: wlan0
 
+# The role refuses to run when ansible_host is an address on the flight interface
+# (the role restarts that link — the connection would be cut mid-run). Set true
+# only if you accept the drop and will re-run to convergence.
+custos_network_allow_flight_mgmt: false
+
 custos_network_country: TW
 custos_network_ssid: custos-link
 # channel/freq/vht_seg0 move together — valid non-DFS 5 GHz triples (hw_mode=a):
@@ -13,6 +18,11 @@ custos_network_ssid: custos-link
 custos_network_channel: 149
 custos_network_freq: 5745
 custos_network_vht_seg0: 155
+# VHT80 (802.11ac). Turn OFF for HT40-only when the ground STA's driver mishandles
+# VHT80 — measured: an mt7921e AP + rtw88_8822bu (RTL8822BU USB) STA silently drops
+# every AP→STA frame over ~900 B once a connection has carried data. Costs peak PHY
+# rate (~867 → ~270 Mbit/s); the flight link needs far less. See README gotchas.
+custos_network_vht: true
 custos_network_prefix: 24
 
 # The two ends of the flight link. custos_network_ip derives from the role —

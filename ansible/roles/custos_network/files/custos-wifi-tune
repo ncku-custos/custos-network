@@ -16,12 +16,23 @@ IFACE="${1:?usage: custos-wifi-tune <iface>}"
 [ -r /etc/custos-network.env ] && . /etc/custos-network.env
 COUNTRY="${CUSTOS_COUNTRY:-TW}"
 
-# A soft-blocked radio makes everything silently fail — clear it first.
-if command -v rfkill >/dev/null 2>&1; then
-  rfkill unblock wlan || true
+# A soft-blocked radio makes everything silently fail — clear it first. Scoped to
+# the flight NIC's phy: `rfkill unblock wlan` is type-wide and would undo a
+# deliberate soft-block of another radio on a multi-radio ground laptop.
+# Best-effort: vendor kernels built without CONFIG_RFKILL have no /dev/rfkill, and
+# nothing can be blocked there anyway.
+if command -v rfkill >/dev/null 2>&1 && [ -e /dev/rfkill ]; then
+  phy="phy$(iw dev "$IFACE" info | awk '/wiphy/{print $2; exit}')" || true
+  idx="$(rfkill list | awk -F: -v p="$phy" '$2 == " " p {print $1; exit}')" || true
+  rfkill unblock "${idx:-wlan}" || true
 fi
 
-iw reg set "$COUNTRY"
+# The regulatory domain is machine-global (all radios, uplink included) — only set
+# it when it actually differs, so boots/re-runs don't kick other radios' links.
+current="$(iw reg get 2>/dev/null | awk '/^country/{print substr($2,1,2); exit}')" || true
+if [ "$current" != "$COUNTRY" ]; then
+  iw reg set "$COUNTRY"
+fi
 iw dev "$IFACE" set power_save off
 
 # Fail loud if power-save did not actually go off.

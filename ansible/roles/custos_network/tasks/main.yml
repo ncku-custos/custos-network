@@ -21,6 +21,32 @@
       must replace the dev PSK. With NAT enabled, custos_network_uplink_iface must differ
       from custos_network_flight_iface.
 
+# The role restarts the flight link — a control connection riding it is cut mid-run
+# (this exact failure happened in the field). ansible_host is the only mgmt-path
+# signal that survives become (sudo strips SSH_CONNECTION from the env), so a
+# hostname that resolves to a flight IP slips through — see the README warning.
+- name: Refuse to provision over the flight interface
+  vars:
+    custos_network_flight_fact: "{{ ansible_facts[custos_network_flight_iface] | default({}) }}"
+    custos_network_flight_ips: >-
+      {{ ([custos_network_flight_fact.ipv4 | default({})]
+          + (custos_network_flight_fact.ipv4_secondaries | default([])))
+         | map(attribute='address', default='') | select | list }}
+  ansible.builtin.assert:
+    that:
+      - custos_network_flight_iface in ansible_facts.interfaces
+      - custos_network_allow_flight_mgmt | bool
+        or (ansible_host | default(''))
+           not in custos_network_flight_ips + [custos_network_drone_ip, custos_network_ground_ip]
+    fail_msg: >-
+      Flight interface '{{ custos_network_flight_iface }}' must exist on the host
+      (check `ip link` / custos_network_flight_iface), and ansible_host
+      ({{ ansible_host | default('<inventory name>') }}) must not be one of its
+      addresses ({{ custos_network_flight_ips | default([]) }}) or a flight-net IP —
+      the role restarts that link and would cut this connection mid-run. Provision
+      over a management path (see README "Provision"), or set
+      custos_network_allow_flight_mgmt=true if you accept the drop.
+
 - name: Install Wi-Fi link packages
   ansible.builtin.apt:
     name:
@@ -56,11 +82,26 @@
         mode: "0644"
       notify: Reload NetworkManager
 
+# NM runs ALL its WiFi clients (uplink/hotspot included) through this one D-Bus
+# unit — never stop it. The unmanaged-devices conf above is what keeps NM (and its
+# supplicant) off the flight NIC. masked:false also repairs boxes damaged by the
+# old unconditional mask, which cut a field laptop's uplink WiFi.
+- name: Keep the shared wpa_supplicant available for NetworkManager
+  ansible.builtin.systemd:
+    name: wpa_supplicant.service
+    masked: false
+    state: started
+  when: custos_network_nmcli.stat.exists
+
+# No NM: nothing needs the shared unit; mask it so a vendor drop-in (-i <iface>)
+# can't grab the flight NIC. If mgmt WiFi on such a box rides this unit, this
+# cuts it — use wired mgmt or wpa_supplicant@<mgmt-iface> there (see README).
 - name: Mask the non-instanced wpa_supplicant.service
   ansible.builtin.systemd:
     name: wpa_supplicant.service
     masked: true
     state: stopped
+  when: not custos_network_nmcli.stat.exists
 
 - name: Mask the packaged hostapd.service (AP only)
   ansible.builtin.systemd:
