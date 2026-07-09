@@ -1,19 +1,20 @@
 # custos-network
 
-Config-as-code for the Custos drone's **Phase 1 bare IP link**: a static-IP 5 GHz Wi-Fi link
-between the drone (access point) and the ground station (station). This is the foundation every
-later traffic plane (MAVLink, video, ROS 2 over Zenoh) rides on. See `docs/intro.md` for the
-full architecture and `docs/rationale.md` for why it's shaped this way.
+Config-as-code for the Custos drone's **flight link**: a static-IP 5 GHz Wi-Fi link between
+the drone (access point) and the ground station (station) — the network layer every traffic
+plane (MAVLink, video, ROS 2 over Zenoh) rides on. See `docs/intro.md` for the full
+architecture and roadmap, and `docs/rationale.md` for why it's shaped this way.
 
 The mechanism is **systemd-networkd** (static IP) + **hostapd** (drone AP) + **wpa_supplicant**
 (ground STA) + one **oneshot** for regulatory domain and Wi-Fi power-save. No NetworkManager,
 no DHCP, no roaming — loss is made a non-event by removing state, not by adding recovery code.
-Provisioning is an **Ansible role** (`ansible/roles/custos_network`).
+Provisioning is an **Ansible role** (`ansible/roles/custos_network`); a ground→internet NAT
+uplink ships as an optional, off-by-default block — see "NAT uplink (optional)".
 
-> **Status:** Phase 1 (the bare link), provisioned by Ansible. The ground→internet NAT/uplink is
-> implemented as an optional, off-by-default block — see "NAT uplink (optional)".
+## Acceptance checks
 
-## The gate (definition of done)
+The link's standing invariants; `scripts/health-check.sh` verifies them on demand (plus the
+NAT path when enabled — see "Verify"):
 
 1. **Ping both ways** over the Wi-Fi link.
 2. **Survives a reboot** of both machines — comes up automatically, no hand-run scripts.
@@ -156,11 +157,11 @@ The script reads `/etc/custos-network.env` (written by the role), so it checks t
 interface and country automatically. Commands below show the `wlan0` default; substitute your
 flight interface.
 
-- **Gate #1 (ping):** health-check pings the peer; or manually, drone `iw dev wlan0 station dump`
+- **Check 1 (ping):** health-check pings the peer; or manually, drone `iw dev wlan0 station dump`
   + `ping -c3 192.168.4.2`, ground `iw dev wlan0 link` + `ping -c3 192.168.4.1`.
-- **Gate #2 (reboot):** `sudo systemctl reboot` both, then re-run health-check — it must pass
+- **Check 2 (reboot):** `sudo systemctl reboot` both, then re-run health-check — it must pass
   with only enabled units, no hand-run bring-up.
-- **Gate #3 (recovery):** on the ground,
+- **Check 3 (recovery):** on the ground,
   `sudo iw dev wlan0 disconnect` then
   `watch -n0.5 'iw dev wlan0 link; ip -4 addr show wlan0'` — confirm it reassociates to the
   pinned BSSID and ping resumes on its own, with the **static IP unchanged throughout** (proves
@@ -176,7 +177,7 @@ still exits 0. Note `-e custos_network_enable_nat=true` is ephemeral: the env fi
 
 ## NAT uplink (optional)
 
-Off by default; a plain Phase 1 run is byte-identical with the flag unset. Enabling
+Off by default; a plain run is byte-identical with the flag unset. Enabling
 `custos_network_enable_nat` (**one line in `group_vars/custos/main.yml`** arms both groups, or
 `-e custos_network_enable_nat=true`) adds:
 
@@ -242,10 +243,8 @@ place for the new iface, so it needs nothing.
 
 ## Radio channel
 
-`docs/` originally specified **ch36**. ch36 is U-NII-1 (5150–5250 MHz), which is typically
-**indoor-only** under TW NCC rules — wrong for an outdoor patrol drone. We use **ch149**
-(U-NII-3, 5745 MHz): also non-DFS (the original reason for ch36) **and** outdoor-legal. A quick
-NCC double-check before flight is still wise. `custos_network_channel`/`_freq`/`_vht_seg0` move
+**ch149** (U-NII-3, 5745 MHz): non-DFS **and** outdoor-legal under TW NCC — a quick NCC
+double-check before flight is still wise. `custos_network_channel`/`_freq`/`_vht_seg0` move
 together — the valid triples are listed in the role defaults, and the role asserts channel↔freq
 consistency.
 
@@ -301,11 +300,3 @@ consistency.
 - **Interface naming** — set `custos_network_flight_iface` per host (in its git-ignored
   host_vars overlay) if the NIC isn't `wlan0`. No dashes in the name (systemd unit-name
   escaping); real NIC names never have them.
-
-## Next steps
-
-- **Vault the PSK before leaving dev** — the guard and procedure are in place (see "The dev PSK
-  is not a secret" above); creating the actual vault is the remaining deployment-time action.
-- **Fill real identity values** — copy the `host_vars/*.yml.example` overlays (mgmt IPs, the
-  drone's flight-iface MAC) and run the three gate tests on hardware.
-- **health-check `--nat` mode** — once the NAT uplink is used in anger.
