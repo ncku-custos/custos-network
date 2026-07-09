@@ -11,6 +11,15 @@
   ansible.builtin.systemd:
     daemon_reload: true
 
+# Reload only — deliberately no `udevadm trigger`. Re-firing ACTION=add on the
+# flight NIC mid-run would queue its own start jobs alongside the restarts below
+# and race them. The new rule governs the next coldplug/hotplug, which is exactly
+# the case it exists for.
+- name: Reload udev rules
+  ansible.builtin.command:
+    cmd: udevadm control --reload-rules
+  changed_when: false
+
 # Oneshot + RemainAfterExit: restarting re-executes the script, so a country or
 # interface change in /etc/custos-network.env actually reapplies the reg domain.
 - name: Re-run the Wi-Fi tuning oneshot

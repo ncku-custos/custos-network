@@ -1,0 +1,38 @@
+{{ ansible_managed | comment }}
+# Let the flight device pull in its own units.
+#
+# Why this exists: the flight radio may be a hotplugged USB adapter (a ground
+# laptop's wlx<mac> stick). Its units carry Requires=/BindsTo= on
+# sys-subsystem-net-devices-<iface>.device, and are pulled in only by
+# WantedBy=multi-user.target — which fires exactly once, at boot. If the adapter
+# is not enumerated within DefaultDeviceTimeoutSec (90s), systemd gives up on the
+# device job and fails every unit that needs it with result 'dependency'. Nothing
+# retries when the adapter finally appears, so the link never comes up. Observed
+# in the field: adapter enumerated 3m20s after systemd stopped waiting.
+#
+# udev replays the event at coldplug for devices already present, and fires again
+# on every hotplug and USB re-enumeration (the RTL8822BU re-enumerates on EPROTO),
+# so this covers all three arrivals with one mechanism.
+#
+# ACTION!="remove", not ACTION=="add": a USB NIC is born as wlan0 and renamed to
+# wlx<mac>, which emits `add` (carrying SYSTEMD_WANTS) and then `move` ~0.6s later.
+# The `move` REWRITES the udev db entry, and an add-only rule leaves it with no
+# SYSTEMD_WANTS. Whether PID1 acted on `add` before `move` landed is a race —
+# measured here: one rebind started both units, the next started neither. Tagging
+# every non-remove action makes the property survive the rename.
+#
+# Matching both NAME and INTERFACE is deliberate. udev applies the rename after
+# rule processing, so during `add` the pending name is in NAME while INTERFACE is
+# still wlan0; on `move` the kernel supplies the new name in INTERFACE. Either key
+# alone misses one of the two events.
+#
+# Must sort AFTER 80-net-setup-link.rules (which assigns NAME) — hence 99-.
+{% set custos_flight_daemon = 'custos-hostapd.service' if custos_network_role == 'ap' else 'wpa_supplicant@' ~ custos_network_flight_iface ~ '.service' %}
+ACTION=="remove", GOTO="custos_flight_end"
+SUBSYSTEM!="net", GOTO="custos_flight_end"
+NAME!="{{ custos_network_flight_iface }}", ENV{INTERFACE}!="{{ custos_network_flight_iface }}", GOTO="custos_flight_end"
+
+ENV{SYSTEMD_WANTS}+="custos-wifi-tune@{{ custos_network_flight_iface }}.service"
+ENV{SYSTEMD_WANTS}+="{{ custos_flight_daemon }}"
+
+LABEL="custos_flight_end"

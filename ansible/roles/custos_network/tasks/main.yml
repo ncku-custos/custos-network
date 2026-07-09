@@ -135,6 +135,17 @@
     mode: "0644"
   notify: Reload systemd daemon
 
+# WantedBy=multi-user.target starts the flight units once, at boot. A USB flight
+# radio that enumerates after systemd's 90s device-job timeout therefore never gets
+# started at all — the units fail with result 'dependency' and nothing retries. This
+# rule makes the device pull them in instead, on coldplug and on every re-enumeration.
+- name: Install the flight-interface udev rule
+  ansible.builtin.template:
+    src: 99-custos-flight.rules.j2
+    dest: /etc/udev/rules.d/99-custos-flight.rules
+    mode: "0644"
+  notify: Reload udev rules
+
 # Single source of truth for the on-box scripts (custos-wifi-tune, health-check.sh).
 # Must land before the tuning oneshot below, which reads it.
 - name: Write the on-box network facts file
@@ -145,12 +156,13 @@
   notify: Re-run the Wi-Fi tuning oneshot
 
 # Set reg domain + power-save off BEFORE hostapd/wpa_supplicant come up, so the STA never
-# tries to associate on ch149 with the wrong regdomain. The AP pulls this in via Wants=, but
-# wpa_supplicant@<iface> does not — so start it explicitly here, ahead of the restarts below.
-- name: Enable and start the Wi-Fi tuning oneshot
+# tries to associate on ch149 with the wrong regdomain. Both daemons now pull this in via
+# Wants= (the AP in its unit, the STA in its drop-in), but start it explicitly here so it
+# is applied ahead of the restarts below.
+- name: Start the Wi-Fi tuning oneshot
   ansible.builtin.systemd:
     name: "custos-wifi-tune@{{ custos_network_flight_iface }}.service"
-    enabled: true
+    enabled: false          # udev starts it on device arrival — see below
     state: started
     daemon_reload: true
 
@@ -198,30 +210,63 @@
 
 - name: Configure wpa_supplicant (STA)
   when: custos_network_role == 'sta'
-  ansible.builtin.template:
-    src: wpa_supplicant.conf.j2
-    dest: "/etc/wpa_supplicant/wpa_supplicant-{{ custos_network_flight_iface }}.conf"
-    mode: "0600"              # holds the PSK — root-only
-  diff: false                 # never print the rendered PSK in --diff runs
-  notify: Restart wpa_supplicant
+  block:
+    - name: Template wpa_supplicant.conf
+      ansible.builtin.template:
+        src: wpa_supplicant.conf.j2
+        dest: "/etc/wpa_supplicant/wpa_supplicant-{{ custos_network_flight_iface }}.conf"
+        mode: "0600"              # holds the PSK — root-only
+      diff: false                 # never print the rendered PSK in --diff runs
+      notify: Restart wpa_supplicant
+
+    # Per-instance drop-in dir: scopes the Wants= below to the flight radio only.
+    - name: Ensure the flight wpa_supplicant drop-in directory exists
+      ansible.builtin.file:
+        path: "/etc/systemd/system/wpa_supplicant@{{ custos_network_flight_iface }}.service.d"
+        state: directory
+        mode: "0755"
+
+    # The AP gets tune-before-radio from custos-hostapd.service's own Wants=/After=.
+    # Give the STA the same guarantee, so no start path can bring the supplicant up
+    # on an untuned radio (wrong reg domain, power-save on).
+    - name: Bind the flight wpa_supplicant to the Wi-Fi tuning oneshot
+      ansible.builtin.copy:
+        src: 10-custos-tune.conf
+        dest: "/etc/systemd/system/wpa_supplicant@{{ custos_network_flight_iface }}.service.d/10-custos-tune.conf"
+        mode: "0644"
+      notify:
+        - Reload systemd daemon
+        - Restart wpa_supplicant
 
 # Apply daemon-reload + the flight-interface reconfigure + service restarts before
 # the enable checks.
 - name: Apply config changes now
   ansible.builtin.meta: flush_handlers
 
-# --- Ensure enabled + running (idempotent after the restarts above) ---
-- name: Enable and start hostapd (AP)
+# --- Ensure running (idempotent after the restarts above) ---
+#
+# enabled: false is deliberate, not an oversight. WantedBy=multi-user.target starts these
+# once, at boot, and both hard-depend on sys-subsystem-net-devices-<iface>.device. A USB
+# flight radio that has not enumerated within DefaultDeviceTimeoutSec (90s) therefore
+# (a) stalls the boot for 90s waiting on a device unit nobody can satisfy — measured on
+# ground-01: network.target @1min 30s — and then (b) fails both units with result
+# 'dependency', with nothing to retry when the adapter finally shows up.
+#
+# 99-custos-flight.rules makes the device pull them in instead. udev replays the event at
+# coldplug for a radio already present at boot, and fires again on hotplug and on USB
+# re-enumeration, so one mechanism covers every arrival path. state: started keeps this
+# run converging; the boot path is udev's.
+- name: Start hostapd (AP)
   ansible.builtin.systemd:
     name: custos-hostapd.service
-    enabled: true
+    enabled: false
     state: started
   when: custos_network_role == 'ap'
 
-- name: Enable and start wpa_supplicant (STA)
+- name: Start wpa_supplicant (STA)
   ansible.builtin.systemd:
     name: "wpa_supplicant@{{ custos_network_flight_iface }}.service"
-    enabled: true
+    enabled: false
     state: started
   when: custos_network_role == 'sta'
 

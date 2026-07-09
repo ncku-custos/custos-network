@@ -210,8 +210,11 @@ interface for `wlan0`):
 `wpa_supplicant@wlan0.service` (ground); `sudo systemctl unmask hostapd.service wpa_supplicant.service`;
 remove `/etc/hostapd/hostapd.conf`, `/etc/systemd/network/10-custos-flight.network`,
 `/etc/wpa_supplicant/wpa_supplicant-wlan0.conf` (ground), `/etc/custos-network.env`,
-`/etc/systemd/system/custos-{hostapd,wifi-tune@}.service`, `/usr/local/sbin/custos-wifi-tune`, and
+`/etc/systemd/system/custos-{hostapd,wifi-tune@}.service`,
+`/etc/systemd/system/wpa_supplicant@wlan0.service.d/` (ground), `/usr/local/sbin/custos-wifi-tune`, and
 `/etc/NetworkManager/conf.d/99-custos-unmanaged.conf`; then `sudo systemctl daemon-reload`.
+Also remove `/etc/udev/rules.d/99-custos-flight.rules` and `sudo udevadm control --reload-rules` —
+otherwise plugging the adapter back in restarts the link you just tore down.
 
 If NAT was enabled, additionally (ground): `sudo systemctl disable --now custos-nat.service`
 (its `ExecStop` deletes the nft table); remove `/etc/systemd/system/custos-nat.service`,
@@ -220,7 +223,9 @@ if nothing else needs forwarding.
 
 **Changing `custos_network_flight_iface` on a provisioned host** strands the old iface's pieces —
 the role only manages the current one. Disable/remove the old `wpa_supplicant@<old>.service` /
-`custos-wifi-tune@<old>.service` and `/etc/wpa_supplicant/wpa_supplicant-<old>.conf` by hand.
+`custos-wifi-tune@<old>.service`, `/etc/wpa_supplicant/wpa_supplicant-<old>.conf`, and
+`/etc/systemd/system/wpa_supplicant@<old>.service.d/` by hand. The udev rule is rewritten in
+place for the new iface, so it needs nothing.
 
 ## Radio channel
 
@@ -233,6 +238,25 @@ consistency.
 
 ## Gotchas
 
+- **The flight units are `disabled`, and that is correct.** udev
+  (`/etc/udev/rules.d/99-custos-flight.rules`) starts `custos-wifi-tune@<iface>` and the role's
+  daemon when the radio *appears*, not when the box boots. `WantedBy=multi-user.target` fires once,
+  at boot, and both units hard-depend on `sys-subsystem-net-devices-<iface>.device`: a USB adapter
+  that has not enumerated within `DefaultDeviceTimeoutSec` (90s) stalls the boot for 90s and then
+  fails both units with `result 'dependency'`, with nothing to retry when it finally shows up. This
+  bit a ground laptop in the field — the stick enumerated 3m20s after systemd stopped waiting, and
+  the link stayed down until the units were started by hand. udev covers coldplug, hotplug, and USB
+  re-enumeration with one mechanism. So `systemctl is-enabled wpa_supplicant@<iface>` printing
+  `disabled` is health, not breakage — check `systemctl is-active` instead.
+- **A udev rule for a renamed NIC must match `ACTION!="remove"`, not `ACTION=="add"`.** A USB NIC is
+  born `wlan0` and renamed to `wlx<mac>`, emitting `add` and then `move` ~0.6s later. The `move`
+  **rewrites the udev db entry**, dropping the `SYSTEMD_WANTS` an add-only rule set — so whether the
+  units start is a race with PID1. It passes maybe half the time, and `udevadm test` shows the
+  add-only rule matching, because it simulates rule matching and not the event sequence. Test rules
+  with a real unbind/bind (`echo '3-3:1.0' | sudo tee /sys/bus/usb/drivers/<drv>/{unbind,bind}`),
+  never with `udevadm test` alone. Matching `NAME` *or* `INTERFACE` is likewise deliberate: the
+  rename is applied after rule processing, so `add` carries the pending name in `NAME` while
+  `INTERFACE` is still `wlan0`, and `move` carries the new name in `INTERFACE`.
 - **NetworkManager vs networkd** — where NM is present, the `unmanaged-devices` conf is what
   keeps NM (and its supplicant) off the flight interface — without it, hostapd/wpa_supplicant
   hit "Device or resource busy". The shared `wpa_supplicant.service` is **left running** there:
