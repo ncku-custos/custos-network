@@ -177,17 +177,6 @@
   notify: Reconfigure the flight interface
   tags: [nat]
 
-# Pre-refactor runs installed iface-named .network files; 10-custos-flight sorts
-# first so it wins even while they linger, but clean them up anyway.
-# TODO: remove this task once every fleet host has run it.
-- name: Remove legacy interface-named network files
-  ansible.builtin.file:
-    path: "/etc/systemd/network/{{ item }}"
-    state: absent
-  loop: [10-wlan0-ap.network, 10-wlan0-sta.network]
-  notify: Reconfigure the flight interface
-  tags: [nat]
-
 # --- Role-specific config ---
 - name: Configure hostapd (AP)
   when: custos_network_role == 'ap'
