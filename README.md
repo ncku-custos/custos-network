@@ -65,10 +65,10 @@ created is the vault's password). Losing the pair is cheap — delete both, re-c
 re-run the playbook: that's a PSK rotation. (`.vault-pass` restored without `vault.yml` falls back
 to the dev PSK, and outside `dev` the role refuses the run — loud and safe, not a bug.)
 
-The role **refuses to run with the dev PSK** unless
-`custos_network_env` is `dev` (the default) — uncomment `custos_network_env: prod` in
-`group_vars/custos/main.yml` to arm the gate. PSK-bearing configs land as root-only (`0600`) and
-are excluded from `--diff` output, so the real key never prints.
+The role **refuses to run with the dev PSK** outside `dev`, and `group_vars/custos/main.yml`
+ships `custos_network_env: prod` — a fresh clone cannot silently deploy the dev key; vault a real
+one first (or pass `-e custos_network_env=dev` for bench runs). PSK-bearing configs land as
+root-only (`0600`) and are excluded from `--diff` output, so the real key never prints.
 
 ## Provision (Ansible)
 

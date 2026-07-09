@@ -3,8 +3,9 @@
 # deliberate, committable deployment decision (identity/secrets stay in the
 # git-ignored host_vars overlays and the vault — not here).
 
-# Arm the PSK gate: refuses to run with the committed dev PSK.
-# custos_network_env: prod
+# PSK gate armed: the role refuses to run with the committed dev PSK.
+# Bench/dev runs override with `-e custos_network_env=dev`.
+custos_network_env: prod
 
 # Ground→internet NAT uplink — this one line arms BOTH groups (drone default
 # route, ground forwarding + masquerade out custos_network_uplink_iface):
