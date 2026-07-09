@@ -262,7 +262,7 @@
     state: started
   when: custos_network_role == 'sta'
 
-# --- Optional ground→internet NAT uplink (off by default; Phase 1 unchanged) ---
+# --- Optional ground→internet NAT uplink (off by default; the bare link is unchanged) ---
 # import_tasks (static) so the tag and condition propagate to every imported task.
 - name: Ground NAT uplink (custos_network_enable_nat)
   ansible.builtin.import_tasks: nat.yml

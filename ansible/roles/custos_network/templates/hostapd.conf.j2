@@ -1,4 +1,4 @@
-# Custos drone AP — Phase 1 bare IP link.
+# Custos drone AP — the bare IP flight link.
 # DEV PSK committed deliberately — ROTATE BEFORE ANY REAL DEPLOYMENT (see README).
 interface={{ custos_network_flight_iface }}
 driver=nl80211
@@ -25,8 +25,8 @@ vht_oper_centr_freq_seg0_idx={{ custos_network_vht_seg0 }}  # center index for t
 # VHT off (custos_network_vht) — HT40 only, ~270 Mbit/s PHY. See the README gotcha:
 # some STA drivers (rtw88_8822bu) black-hole >900 B AP→STA frames under VHT80.
 {% endif %}
-# 802.11ax (WiFi6) / HE160 deliberately OFF in Phase 1 — historically flaky on mt7921/mt7922
-# AP mode. Enable only after the link is proven.
+# 802.11ax (WiFi6) / HE160 deliberately OFF — historically flaky on mt7921/mt7922
+# AP mode. Enable only with a proven driver pairing.
 
 # --- QoS substrate (kept default now; tuned in the QoS phase, not here) ---
 wmm_enabled=1

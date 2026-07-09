@@ -1,5 +1,5 @@
 [Unit]
-Description=Custos hostapd AP on {{ custos_network_flight_iface }} (Phase 1 bare IP link)
+Description=Custos hostapd AP on {{ custos_network_flight_iface }} (bare IP flight link)
 # Tie lifecycle to the physical interface: start only once {{ custos_network_flight_iface }} exists, stop if it goes.
 BindsTo=sys-subsystem-net-devices-{{ custos_network_flight_iface }}.device
 After=sys-subsystem-net-devices-{{ custos_network_flight_iface }}.device

@@ -1,6 +1,6 @@
 ---
 custos_network_role: sta
-# Pin to the drone's real flight-interface MAC before bring-up (placeholder = the
-# Phase 1 value; real value goes in the git-ignored host_vars overlay):
+# Committed placeholder only — the drone's real flight-interface MAC lives in the
+# git-ignored host_vars overlay (read it on the drone: `ip link show <flight-iface>`):
 custos_network_ap_bssid: "00:11:22:33:44:55"
 # NAT uplink (both groups at once): uncomment in group_vars/custos/main.yml.

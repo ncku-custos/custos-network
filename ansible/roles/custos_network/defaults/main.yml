@@ -1,5 +1,5 @@
 ---
-# custos_network role defaults — Phase 1 bare IP link.
+# custos_network role defaults — the bare IP flight link.
 
 # Flight radio interface. Override per host (host_vars) — e.g. a laptop ground
 # station using a USB adapter (wlx…) while the drone stays wlan0. No dashes
@@ -43,7 +43,7 @@ custos_network_env: dev
 #   custos_network_role:     ap | sta
 #   custos_network_ap_bssid: "aa:bb:cc:dd:ee:ff"  (sta only — the AP's flight-interface MAC)
 
-# --- Optional ground→internet NAT uplink (tags: nat). Default OFF: Phase 1 unchanged. ---
+# --- Optional ground→internet NAT uplink (tags: nat). Default OFF: the bare link is unchanged. ---
 # Enable for BOTH groups in group_vars/custos/main.yml (ground gets the NAT machinery,
 # drone gets the default route).
 custos_network_enable_nat: false

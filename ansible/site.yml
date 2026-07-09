@@ -1,5 +1,5 @@
 ---
-- name: Provision the Custos Phase 1 Wi-Fi link
+- name: Provision the Custos Wi-Fi flight link
   # Overridable for the serial-only local flow (see README):
   # ansible-playbook -i 'localhost,' -c local site.yml -e custos_network_target=all …
   hosts: "{{ custos_network_target | default('custos') }}"
