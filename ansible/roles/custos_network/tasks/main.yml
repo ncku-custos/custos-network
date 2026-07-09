@@ -148,12 +148,15 @@
 
 # Single source of truth for the on-box scripts (custos-wifi-tune, health-check.sh).
 # Must land before the tuning oneshot below, which reads it.
+# Tagged nat: health-check.sh auto-detects NAT from CUSTOS_NAT, so a
+# `--tags nat` run must refresh the facts file too.
 - name: Write the on-box network facts file
   ansible.builtin.template:
     src: custos-network.env.j2
     dest: /etc/custos-network.env
     mode: "0644"
   notify: Re-run the Wi-Fi tuning oneshot
+  tags: [nat]
 
 # Set reg domain + power-save off BEFORE hostapd/wpa_supplicant come up, so the STA never
 # tries to associate on ch149 with the wrong regdomain. Both daemons now pull this in via

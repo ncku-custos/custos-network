@@ -141,6 +141,8 @@ link). Notes:
   Set `custos_network_country` for your jurisdiction *before* field use (the tuning oneshot
   skips the set when the domain already matches, so boots and re-runs don't churn it).
 
+After the run, `sudo ./scripts/health-check.sh --role ground` — the NAT checks run automatically.
+
 ## Verify
 
 ```bash
@@ -160,6 +162,14 @@ flight interface.
   `watch -n0.5 'iw dev wlan0 link; ip -4 addr show wlan0'` — confirm it reassociates to the
   pinned BSSID and ping resumes on its own, with the **static IP unchanged throughout** (proves
   `IgnoreCarrierLoss`). The truer RF-loss test is AP-side `hostapd_cli deauthenticate <mac>`.
+
+**NAT checks** run automatically when the host was provisioned with the NAT uplink enabled
+(the role records `CUSTOS_NAT` in `/etc/custos-network.env`; hosts provisioned before that
+variable existed need one re-run first). Provisioned state — forwarding, `custos-nat.service`,
+the nft table and masquerade rule, the drone's default route and DNS — **FAILs**; uplink
+environment — tether present, internet reachable — only **WARNs**, so a tetherless bench run
+still exits 0. Note `-e custos_network_enable_nat=true` is ephemeral: the env file records the
+*last run's* intent, so persistent NAT belongs in `group_vars/custos/main.yml`.
 
 ## NAT uplink (optional)
 
@@ -197,8 +207,8 @@ check DNS). Gotchas:
 - **`ip_forward=1` is machine-global:** with no other firewall the ground box will also forward
   between its *other* interfaces (Docker/LXD hosts already run this way) — the custos nft table
   only guards traffic touching the flight net.
-- `health-check.sh` has no NAT checks yet (its gates are link-layer); verify NAT manually as
-  above for now.
+- `sudo ./scripts/health-check.sh` covers the NAT path automatically (see "Verify"); the
+  manual commands above remain the fallback.
 - The role is additive: turning the flag back off skips the tasks but removes nothing — see
   uninstall below.
 
