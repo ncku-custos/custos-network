@@ -1,6 +1,16 @@
 ---
 # Copy to drone-01.yml (git-ignored) and fill in real values.
-# host_vars outranks the inventory.ini placeholders — no -e / -i juggling needed.
+# host_vars outranks the committed group_vars/defaults — no -e / -i juggling needed.
 
 # Management IP for provisioning — wired bench Ethernet / USB-NIC, NEVER 192.168.4.1.
 ansible_host: 10.0.0.10
+
+# SSH user on this host (per-host — drone and ground may differ).
+# Unset = your local username.
+# ansible_user: pi
+
+# SSH key for this host (uncomment if not your agent/default key):
+# ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+
+# Flight radio interface (default wlan0; set if the NIC enumerates as wlp*/wlx* — `ip link`):
+# custos_network_flight_iface: wlan0

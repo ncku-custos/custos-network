@@ -4,14 +4,22 @@
     that:
       - custos_network_role in ['ap', 'sta']
       - custos_network_ip is defined
+      # systemd escapes '-' as \x2d in device-unit names, and the distro
+      # wpa_supplicant@.service unescapes %I ('-' → '/') — real NIC names
+      # (wlan0, wlp0s20f3, wlx<mac>, usb0, enx<mac>) never contain one.
+      - "'-' not in custos_network_flight_iface"
+      # channel/freq must move together (5 GHz: freq = 5000 + 5*channel).
+      - custos_network_freq | int == 5000 + 5 * (custos_network_channel | int)
       # Outside dev, refuse to ship the committed dev PSK — vault a real one (see README).
       - custos_network_env == 'dev' or custos_network_wifi_psk != 'custos-dev-changeme'
       # The NAT uplink must never be the flight radio itself.
-      - not (custos_network_enable_nat | bool) or custos_network_uplink_iface != 'wlan0'
+      - not (custos_network_enable_nat | bool) or custos_network_uplink_iface != custos_network_flight_iface
     fail_msg: >-
-      Set custos_network_role (ap|sta) and custos_network_ip in group_vars.
-      With custos_network_env != 'dev', a vaulted vault_wifi_psk must replace the dev PSK.
-      With NAT enabled, custos_network_uplink_iface must not be wlan0.
+      Set custos_network_role (ap|sta) in group_vars. custos_network_flight_iface must not
+      contain '-'. custos_network_freq must equal 5000 + 5*custos_network_channel (see the
+      channel table in defaults). With custos_network_env != 'dev', a vaulted vault_wifi_psk
+      must replace the dev PSK. With NAT enabled, custos_network_uplink_iface must differ
+      from custos_network_flight_iface.
 
 - name: Install Wi-Fi link packages
   ansible.builtin.apt:
@@ -25,13 +33,15 @@
     cache_valid_time: 3600
   when: ansible_os_family == 'Debian'   # S4 — offline/non-Debian boards must pre-stage these
 
-# --- Hand wlan0 to networkd: stop NetworkManager and the plain wpa_supplicant from grabbing it ---
+# --- Hand the flight interface to networkd: stop NetworkManager and the plain
+# wpa_supplicant from grabbing it. Only the flight NIC is unmanaged — uplink/mgmt
+# NICs stay with whatever manages them today. ---
 - name: Detect NetworkManager
   ansible.builtin.stat:
     path: /usr/bin/nmcli
   register: custos_network_nmcli
 
-- name: Unmanage wlan0 in NetworkManager
+- name: Unmanage the flight interface in NetworkManager
   when: custos_network_nmcli.stat.exists   # S3 — only if NM is present
   block:
     - name: Ensure NetworkManager conf.d exists
@@ -59,7 +69,8 @@
     state: stopped
   when: custos_network_role == 'ap'
 
-# Release wlan0 from NetworkManager BEFORE networkd takes it (avoids a two-manager race).
+# Release the flight interface from NetworkManager BEFORE networkd takes it
+# (avoids a two-manager race).
 - name: Apply NetworkManager + mask changes now
   ansible.builtin.meta: flush_handlers
 
@@ -83,12 +94,21 @@
     mode: "0644"
   notify: Reload systemd daemon
 
-# Set reg domain (TW) + power-save off BEFORE hostapd/wpa_supplicant come up, so the STA never
+# Single source of truth for the on-box scripts (custos-wifi-tune, health-check.sh).
+# Must land before the tuning oneshot below, which reads it.
+- name: Write the on-box network facts file
+  ansible.builtin.template:
+    src: custos-network.env.j2
+    dest: /etc/custos-network.env
+    mode: "0644"
+  notify: Re-run the Wi-Fi tuning oneshot
+
+# Set reg domain + power-save off BEFORE hostapd/wpa_supplicant come up, so the STA never
 # tries to associate on ch149 with the wrong regdomain. The AP pulls this in via Wants=, but
-# wpa_supplicant@wlan0 does not — so start it explicitly here, ahead of the restarts below.
+# wpa_supplicant@<iface> does not — so start it explicitly here, ahead of the restarts below.
 - name: Enable and start the Wi-Fi tuning oneshot
   ansible.builtin.systemd:
-    name: custos-wifi-tune@wlan0.service
+    name: "custos-wifi-tune@{{ custos_network_flight_iface }}.service"
     enabled: true
     state: started
     daemon_reload: true
@@ -96,12 +116,23 @@
 # --- Static IP via networkd ---
 # Tagged nat: the template carries the drone's conditional Gateway=/DNS=, so a
 # `--tags nat` run must deliver it too (assumes a previously fully-provisioned host).
-- name: Configure the static IP on wlan0
+- name: Configure the static IP on the flight interface
   ansible.builtin.template:
-    src: wlan0.network.j2
-    dest: "/etc/systemd/network/10-wlan0-{{ custos_network_role }}.network"
+    src: flight.network.j2
+    dest: /etc/systemd/network/10-custos-flight.network
     mode: "0644"
-  notify: Reconfigure wlan0
+  notify: Reconfigure the flight interface
+  tags: [nat]
+
+# Pre-refactor runs installed iface-named .network files; 10-custos-flight sorts
+# first so it wins even while they linger, but clean them up anyway.
+# TODO: remove this task once every fleet host has run it.
+- name: Remove legacy interface-named network files
+  ansible.builtin.file:
+    path: "/etc/systemd/network/{{ item }}"
+    state: absent
+  loop: [10-wlan0-ap.network, 10-wlan0-sta.network]
+  notify: Reconfigure the flight interface
   tags: [nat]
 
 # --- Role-specific config ---
@@ -116,22 +147,25 @@
       diff: false             # never print the rendered PSK in --diff runs
       notify: Restart hostapd
     - name: Install the custos-hostapd unit
-      ansible.builtin.copy:
-        src: custos-hostapd.service
+      ansible.builtin.template:
+        src: custos-hostapd.service.j2
         dest: /etc/systemd/system/custos-hostapd.service
         mode: "0644"
-      notify: Reload systemd daemon
+      notify:
+        - Reload systemd daemon
+        - Restart hostapd
 
 - name: Configure wpa_supplicant (STA)
   when: custos_network_role == 'sta'
   ansible.builtin.template:
-    src: wpa_supplicant-wlan0.conf.j2
-    dest: /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+    src: wpa_supplicant.conf.j2
+    dest: "/etc/wpa_supplicant/wpa_supplicant-{{ custos_network_flight_iface }}.conf"
     mode: "0600"              # holds the PSK — root-only
   diff: false                 # never print the rendered PSK in --diff runs
   notify: Restart wpa_supplicant
 
-# Apply daemon-reload + the wlan0 reconfigure + service restarts before the enable checks.
+# Apply daemon-reload + the flight-interface reconfigure + service restarts before
+# the enable checks.
 - name: Apply config changes now
   ansible.builtin.meta: flush_handlers
 
@@ -145,7 +179,7 @@
 
 - name: Enable and start wpa_supplicant (STA)
   ansible.builtin.systemd:
-    name: wpa_supplicant@wlan0.service
+    name: "wpa_supplicant@{{ custos_network_flight_iface }}.service"
     enabled: true
     state: started
   when: custos_network_role == 'sta'

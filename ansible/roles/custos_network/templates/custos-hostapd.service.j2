@@ -1,0 +1,18 @@
+[Unit]
+Description=Custos hostapd AP on {{ custos_network_flight_iface }} (Phase 1 bare IP link)
+# Tie lifecycle to the physical interface: start only once {{ custos_network_flight_iface }} exists, stop if it goes.
+BindsTo=sys-subsystem-net-devices-{{ custos_network_flight_iface }}.device
+After=sys-subsystem-net-devices-{{ custos_network_flight_iface }}.device
+# Radio must be in TW + power-save off before the AP comes up.
+Wants=custos-wifi-tune@{{ custos_network_flight_iface }}.service
+After=custos-wifi-tune@{{ custos_network_flight_iface }}.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/sbin/rfkill unblock wlan
+ExecStart=/usr/sbin/hostapd /etc/hostapd/hostapd.conf
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

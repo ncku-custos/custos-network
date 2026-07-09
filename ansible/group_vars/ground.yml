@@ -1,9 +1,6 @@
 ---
 custos_network_role: sta
-custos_network_ip: 192.168.4.2
-# Pin to the drone's real wlan0 MAC before bring-up (placeholder = the Phase 1 value;
-# real value goes in the git-ignored host_vars overlay):
+# Pin to the drone's real flight-interface MAC before bring-up (placeholder = the
+# Phase 1 value; real value goes in the git-ignored host_vars overlay):
 custos_network_ap_bssid: "00:11:22:33:44:55"
-# NAT uplink: enable for BOTH groups (ground gets forwarding + masquerade out
-# custos_network_uplink_iface — default eth0, override in host_vars if needed):
-# custos_network_enable_nat: true
+# NAT uplink (both groups at once): uncomment in group_vars/custos/main.yml.

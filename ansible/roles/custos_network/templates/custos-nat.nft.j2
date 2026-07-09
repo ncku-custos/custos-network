@@ -15,12 +15,16 @@ table ip custos_nat {
     # These rules control only traffic touching the flight link.
     chain forward {
         type filter hook forward priority filter; policy accept;
-        iifname "wlan0" oifname "{{ custos_network_uplink_iface }}" accept
-        iifname "{{ custos_network_uplink_iface }}" oifname "wlan0" ct state established,related accept
-        iifname "{{ custos_network_uplink_iface }}" oifname "wlan0" drop comment "no unsolicited ingress to the flight net"
-        iifname "wlan0" drop comment "flight net exits ONLY via the uplink"
-        oifname "wlan0" drop comment "nothing else forwards into the flight net"
-        # Cellular uplinks with a small MTU may need MSS clamping — uncomment if TCP stalls:
-        # oifname "{{ custos_network_uplink_iface }}" tcp flags syn tcp option maxseg size set rt mtu
+{% if custos_network_clamp_mss | bool %}
+        # Clamp TCP MSS to path MTU both ways (non-terminal — must precede the accepts).
+        # Phone/cellular uplinks have small MTUs; a no-op on 1500-MTU ethernet.
+        iifname "{{ custos_network_flight_iface }}" oifname "{{ custos_network_uplink_iface }}" tcp flags syn tcp option maxseg size set rt mtu
+        iifname "{{ custos_network_uplink_iface }}" oifname "{{ custos_network_flight_iface }}" tcp flags syn tcp option maxseg size set rt mtu
+{% endif %}
+        iifname "{{ custos_network_flight_iface }}" oifname "{{ custos_network_uplink_iface }}" accept
+        iifname "{{ custos_network_uplink_iface }}" oifname "{{ custos_network_flight_iface }}" ct state established,related accept
+        iifname "{{ custos_network_uplink_iface }}" oifname "{{ custos_network_flight_iface }}" drop comment "no unsolicited ingress to the flight net"
+        iifname "{{ custos_network_flight_iface }}" drop comment "flight net exits ONLY via the uplink"
+        oifname "{{ custos_network_flight_iface }}" drop comment "nothing else forwards into the flight net"
     }
 }

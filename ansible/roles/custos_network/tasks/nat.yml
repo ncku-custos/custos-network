@@ -1,7 +1,7 @@
 ---
 # Ground→internet NAT uplink (custos_network_enable_nat, tags: nat).
 # Ground (STA) side only — the drone's half is the conditional Gateway=/DNS= in
-# wlan0.network.j2. Rules live in a dedicated `table ip custos_nat` loaded by our own
+# flight.network.j2. Rules live in a dedicated `table ip custos_nat` loaded by our own
 # oneshot unit: nftables' multi-table semantics mean our accepts can never override
 # another firewall's drops, and we never touch their tables. Do NOT enable the distro
 # nftables.service — stock /etc/nftables.conf starts with `flush ruleset`.

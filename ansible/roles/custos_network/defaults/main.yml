@@ -1,30 +1,46 @@
 ---
 # custos_network role defaults — Phase 1 bare IP link.
-# The interface is hardcoded wlan0 throughout the role (see README); it is not a variable.
+
+# Flight radio interface. Override per host (host_vars) — e.g. a laptop ground
+# station using a USB adapter (wlx…) while the drone stays wlan0. No dashes
+# (systemd unit-name escaping); real NIC names never have them.
+custos_network_flight_iface: wlan0
+
 custos_network_country: TW
 custos_network_ssid: custos-link
+# channel/freq/vht_seg0 move together — valid non-DFS 5 GHz triples (hw_mode=a):
+#   (36, 5180, 42) · (149, 5745, 155) · (157, 5785, 155) · (161, 5805, 155)
 custos_network_channel: 149
 custos_network_freq: 5745
 custos_network_vht_seg0: 155
 custos_network_prefix: 24
 
+# The two ends of the flight link. custos_network_ip derives from the role —
+# override only for a nonstandard addressing plan.
+custos_network_drone_ip: 192.168.4.1
+custos_network_ground_ip: 192.168.4.2
+custos_network_ip: "{{ custos_network_drone_ip if custos_network_role == 'ap' else custos_network_ground_ip }}"
+
 # Dev PSK. Override with a vaulted `vault_wifi_psk` before any real deployment.
 custos_network_wifi_psk: "{{ vault_wifi_psk | default('custos-dev-changeme') }}"
 
 # Deployment gate: any value other than 'dev' refuses to run with the dev PSK above
-# (see "Validate role parameters"). Set custos_network_env: prod in a real inventory.
+# (see "Validate role parameters"). Arm it in group_vars/custos/main.yml.
 custos_network_env: dev
 
-# Per-host values are provided in group_vars (intentionally not defaulted, so the role
+# Per-host values provided in group_vars (intentionally not defaulted, so the role
 # asserts they are set):
 #   custos_network_role:     ap | sta
-#   custos_network_ip:       192.168.4.1 (ap) / 192.168.4.2 (sta)
-#   custos_network_ap_bssid: "aa:bb:cc:dd:ee:ff"  (sta only — the AP's wlan0 MAC)
+#   custos_network_ap_bssid: "aa:bb:cc:dd:ee:ff"  (sta only — the AP's flight-interface MAC)
 
 # --- Optional ground→internet NAT uplink (tags: nat). Default OFF: Phase 1 unchanged. ---
-# Enable for BOTH groups (ground gets the NAT machinery, drone gets the default route).
+# Enable for BOTH groups in group_vars/custos/main.yml (ground gets the NAT machinery,
+# drone gets the default route).
 custos_network_enable_nat: false
-custos_network_uplink_iface: eth0              # ground's internet-side iface (eth0/wwan0) — never wlan0
+custos_network_uplink_iface: eth0              # ground's internet-side iface (eth0/usb0/wwan0) — never the flight iface
 custos_network_flight_subnet: 192.168.4.0/24   # kept explicit: no ipaddr filter without ansible.utils
-custos_network_gateway: 192.168.4.2            # drone's default route = the ground STA's flight IP
+custos_network_gateway: "{{ custos_network_ground_ip }}"  # drone's default route = the ground STA's flight IP
 custos_network_dns: [1.1.1.1, 9.9.9.9]         # drone resolvers when NAT is on (needs systemd-resolved)
+# Clamp forwarded TCP MSS to path MTU — needed on small-MTU phone/cellular uplinks,
+# a no-op on 1500-MTU ethernet. Only rendered when NAT is on.
+custos_network_clamp_mss: true

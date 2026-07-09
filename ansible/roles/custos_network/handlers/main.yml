@@ -11,14 +11,22 @@
   ansible.builtin.systemd:
     daemon_reload: true
 
-# Apply the new .network to wlan0 ONLY — never `systemctl restart systemd-networkd`, which
-# re-applies every interface and can drop the control node's SSH on the mgmt NIC (S1).
-- name: Reconfigure wlan0
+# Oneshot + RemainAfterExit: restarting re-executes the script, so a country or
+# interface change in /etc/custos-network.env actually reapplies the reg domain.
+- name: Re-run the Wi-Fi tuning oneshot
+  ansible.builtin.systemd:
+    name: "custos-wifi-tune@{{ custos_network_flight_iface }}.service"
+    state: restarted
+
+# Apply the new .network to the flight interface ONLY — never `systemctl restart
+# systemd-networkd`, which re-applies every interface and can drop the control
+# node's SSH on the mgmt NIC (S1).
+- name: Reconfigure the flight interface
   ansible.builtin.command:
     cmd: "{{ item }}"
   loop:
     - networkctl reload
-    - networkctl reconfigure wlan0
+    - "networkctl reconfigure {{ custos_network_flight_iface }}"
   changed_when: false
 
 - name: Restart hostapd
@@ -28,7 +36,7 @@
 
 - name: Restart wpa_supplicant
   ansible.builtin.systemd:
-    name: wpa_supplicant@wlan0.service
+    name: "wpa_supplicant@{{ custos_network_flight_iface }}.service"
     state: restarted
 
 # Scoped to our file — `sysctl --system` would re-apply every file on the box.

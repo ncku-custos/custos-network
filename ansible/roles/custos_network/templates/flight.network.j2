@@ -1,5 +1,5 @@
 [Match]
-Name=wlan0
+Name={{ custos_network_flight_iface }}
 
 [Network]
 Address={{ custos_network_ip }}/{{ custos_network_prefix }}
@@ -18,5 +18,5 @@ DNS={{ server }}
 {% endif %}
 
 [Link]
-# Don't let systemd-networkd-wait-online hang the boot on wlan0.
+# Don't let systemd-networkd-wait-online hang the boot on the flight interface.
 RequiredForOnline=no

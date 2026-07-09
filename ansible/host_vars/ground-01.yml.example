@@ -1,13 +1,30 @@
 ---
 # Copy to ground-01.yml (git-ignored) and fill in real values.
-# host_vars outranks inventory.ini placeholders and group_vars — no -e / -i juggling needed.
+# host_vars outranks the committed group_vars/defaults — no -e / -i juggling needed.
 
 # Management IP for provisioning — the ground's eth0/cellular uplink, NEVER 192.168.4.2.
 ansible_host: 10.0.0.20
 
-# The drone's real wlan0 MAC (read it on the drone: `ip link show wlan0`).
+# If the ground station IS the machine you run ansible from, skip SSH entirely
+# (become still works — add -K if your sudo needs a password):
+# ansible_connection: local
+
+# SSH user on this host (per-host — drone and ground may differ).
+# Unset = your local username.
+# ansible_user: operator
+
+# SSH key for this host (uncomment if not your agent/default key):
+# ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+
+# The drone's real flight-interface MAC (read it on the drone: `ip link show wlan0`).
 # Outranks the placeholder in group_vars/ground.yml.
 custos_network_ap_bssid: "aa:bb:cc:dd:ee:ff"
 
-# Uncomment if the ground's internet-side interface is not eth0 (e.g. wwan0):
-# custos_network_uplink_iface: wwan0
+# Internet-side uplink NIC for the NAT option (default eth0). Field examples:
+#   usb0 / enx*  — phone USB tether (Android rndis / iPhone)
+#   wlp0s20f3    — built-in WiFi joined to a phone hotspot
+#   wwan0        — cellular modem
+# custos_network_uplink_iface: usb0
+
+# Flight radio — e.g. the USB WiFi adapter when the built-in is the uplink:
+# custos_network_flight_iface: wlx0013ef1a2b3c

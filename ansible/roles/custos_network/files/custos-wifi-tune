@@ -10,7 +10,11 @@
 set -euo pipefail
 
 IFACE="${1:?usage: custos-wifi-tune <iface>}"
-COUNTRY="TW"
+
+# Country comes from the facts file the role writes; fallback = the role default.
+# shellcheck disable=SC1091
+[ -r /etc/custos-network.env ] && . /etc/custos-network.env
+COUNTRY="${CUSTOS_COUNTRY:-TW}"
 
 # A soft-blocked radio makes everything silently fail — clear it first.
 if command -v rfkill >/dev/null 2>&1; then
