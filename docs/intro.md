@@ -55,8 +55,9 @@ non-event by having nothing to rebuild.
 
 [rationale.md](rationale.md)
 
-Every load-bearing decision, each tagged `[documented]` (explicitly decided in design — a pending
-ADR) or `[inferred]` (my reading), with open questions recorded rather than invented. The whole
+Every load-bearing decision, each tagged `[documented]` (explicitly decided in design and
+implemented in this repo) or `[inferred]` (my reading), with open questions recorded rather
+than invented. The whole
 file hangs off one tension: **one shared, lossy, bandwidth-limited link carrying three conflicting
 traffic classes under flight-safety constraints.**
 **What to notice:** the recurring move is *subtraction* — no DHCP, no TCP, no roaming, no DFS,
@@ -77,24 +78,24 @@ real and invisible to the logical Structure view.
 
 ---
 
-## Entrypoints — where to start building
+## Entrypoints — where things live
 
-The entrypoint is the build sequence, not a `main()` — Phase 1 and its Ansible role are in the
-repo; later phases stack on top. Start at the bottom of the stack and climb, gating each layer
-before the next:
+The entrypoint is the build sequence, not a `main()` — climb the stack, gating each layer
+before the next. The bottom layers are done and live in this repo:
 
-1. **Phase 0 — foundation.** Confirm a serial console that works with Wi-Fi down (the lifeline),
-   `git init` the config-as-code repo, snapshot a base image.
-2. **Phase 1 — bare IP link (the first commit).** `hostapd.conf` (ch 149, country TW) + static
-   `192.168.4.1/24` on the drone; `wpa_supplicant.conf` (pinned BSSID, `bgscan=""`) + static `.2`
-   on the ground; `power_save off` both ends. **Done when:** ping both ways, survives a reboot,
-   and a forced `iw disconnect` recovers on its own.
-3. **Phases 2–6** then stack one plane at a time — reproducible Ansible role → MAVLink →
-   video → ROS 2 over Zenoh → QoS last — each with its own gate.
+1. **Foundation — done.** A serial console that works with Wi-Fi down (the lifeline), this
+   config-as-code repo, a base image snapshot.
+2. **Bare IP link — done.** hostapd (ch 149, country TW) + static `192.168.4.1/24` on the
+   drone; wpa_supplicant (pinned BSSID, `bgscan=""`) + static `.2` on the ground; power-save
+   off both ends. Provisioned by the Ansible role (`ansible/roles/custos_network`), verified
+   by `scripts/health-check.sh` (ping both ways, survives a reboot, forced disconnect recovers
+   on its own), operated per the README.
+3. **Remaining phases** stack one plane at a time — MAVLink → video → ROS 2 over Zenoh →
+   QoS last — each with its own gate.
 
-**Key files to create first:** `hostapd.conf`, `wpa_supplicant.conf`, a static-IP + power-save
-bring-up script, and a re-runnable `health-check`. The diagrams above are the destination; the
-first commit is "two machines ping each other after a reboot, reproducibly."
+**Key places:** `ansible/roles/custos_network` (the link), `scripts/health-check.sh` (the
+acceptance checks), the README (operations). The diagrams above are the destination; the link
+layer beneath them is running.
 
 > Generated as a project-intro: Structure / Behavior / Rationale + one situational view
-> (topology), drawn from the architecture discussion rather than a repo survey.
+> (topology).

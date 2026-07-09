@@ -1,11 +1,10 @@
 # Rationale — why the stack is shaped this way
 
-> **Provenance convention.** This project has no repository or ADRs *yet*, so the usual
-> `[documented]` sources (commits, design docs, "why" comments) don't exist on disk. Here
-> `[documented]` marks decisions we **explicitly made and reasoned through during architecture
-> design** — each is a pending ADR and should be written up as one. `[inferred]` marks my
-> reading of the design that was *not* explicitly settled. Items with no recoverable reason are
-> recorded as **open**, not invented.
+> **Provenance convention.** `[documented]` marks decisions **explicitly made and reasoned
+> through during architecture design** and since implemented in this repo — the on-disk sources
+> are the `custos_network` role, the README, and this file, which together are the standing
+> decision record. `[inferred]` marks my reading of the design that was *not* explicitly
+> settled. Items with no recoverable reason are recorded as **open**, not invented.
 
 ## The central tension
 
@@ -54,11 +53,11 @@ flight link, so both are removed at the physical/link layer. The specific channe
 (U-NII-3, 5745 MHz): non-DFS *and* outdoor-legal under TW NCC. An earlier draft used ch36, but
 that is U-NII-1 (5150–5250 MHz), typically indoor-only — wrong for an outdoor drone.
 
-**Network bring-up lives as a config module / Ansible role — not firmware, not its own repo
-(yet).** **[documented]** — kept maximally editable during the learning phase for iteration
-speed (a baked image means re-flash; a config layer means edit-and-reapply). It is cleanly
-*separable* but not yet *reusable enough* to extract: the rule-of-three threshold (a real second
-consumer) has not been met, so it stays a module with a sharp interface until it is.
+**Network bring-up lives as config-as-code — this repo's Ansible role, not baked firmware.**
+**[documented]** — kept maximally editable for iteration speed (a baked image means re-flash; a
+config layer means edit-and-reapply). The role is cleanly *separable* but not extracted as a
+standalone reusable role: the rule-of-three threshold (a real second consumer) has not been met,
+so it stays here with a sharp interface until it is.
 
 **Your ROS 2 application nodes are the only code written from scratch.** **[inferred]** — this
 is my reading of the craft/steal split as a deliberate posture rather than an accident: every
@@ -77,9 +76,8 @@ split but did not state it as a governing principle, so I tag it inferred.
 
 ## Provenance health
 
-Nearly all rationale here is *decided-in-design* (would be `[documented]` the moment the ADRs
-are written) rather than hard `[inferred]` — which is the healthy state for a project at
-progress 0 that reasoned before it built. The main gaps are implementation specifics (QoS
-values, topic lists) that are correctly deferred to the phases where real load makes them
-measurable. **Action:** promote the eight `[documented]` decisions above into ADRs in the repo
-on day one, so this file's convention can revert to citing real sources.
+Nearly all rationale here is *decided-in-design and now implemented* rather than hard
+`[inferred]` — the project reasoned before it built, and the bare link plus its Ansible role
+shipped to that reasoning. The main gaps are implementation specifics (QoS values, topic lists)
+that are correctly deferred to the phases where real load makes them measurable. This file is
+the standing decision record — update it in the same change that alters a decision.
