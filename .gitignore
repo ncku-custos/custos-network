@@ -1,8 +1,10 @@
 # Ansible local artifact/cache dirs (see ansible.cfg)
 .ansible/
 
-# Vault password material — never in git; the encrypted vault.yml itself IS committed.
+# The vault pair is local-only: the password AND the encrypted vault.yml both stay
+# out of git (public history is permanent). Back the pair up out-of-band — see README.
 .vault-pass
+ansible/group_vars/custos/vault.yml
 
 # Real per-host identity (mgmt IPs, the AP's BSSID) stays out of git — copy the
 # committed *.example files, strip the suffix, fill in real values.

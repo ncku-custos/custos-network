@@ -2,7 +2,8 @@
 # Vault password source (wired via ansible.cfg vault_password_file). Prints
 # ansible/.vault-pass, minting a random one on first use so `ansible-vault create`
 # and flagless playbook runs both just work. Joining an existing deployment?
-# Copy its .vault-pass here BEFORE the first run instead.
+# Copy the pair — its .vault-pass here AND its group_vars/custos/vault.yml —
+# BEFORE the first run instead (both are git-ignored, local-only).
 set -eu
 d="$(dirname "$0")"
 if [ ! -f "$d/.vault-pass" ]; then

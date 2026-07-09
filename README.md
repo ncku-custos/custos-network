@@ -40,8 +40,8 @@ Tracked files are **never edited** to deploy this repo:
   everything machine-specific: mgmt IP, SSH user/key, flight + uplink NICs, the drone's real BSSID.
 - **`ansible/group_vars/custos/main.yml`** (tracked) — deployment-wide, committable toggles:
   `custos_network_env: prod`, `custos_network_enable_nat: true`.
-- **`ansible/group_vars/custos/vault.yml`** (encrypted) + **`ansible/.vault-pass`** (git-ignored) —
-  the real PSK. See the next section.
+- **`ansible/group_vars/custos/vault.yml`** (encrypted) + **`ansible/.vault-pass`** — the real
+  PSK; a git-ignored, local-only pair. See the next section.
 - **`ansible/roles/custos_network/defaults/main.yml`** — every knob with its default; override in
   host_vars/group_vars, not in place.
 
@@ -58,11 +58,14 @@ ansible-playbook site.yml                          # flagless — ansible.cfg wi
 
 No `--ask-vault-pass` needed: `ansible.cfg` points at `vault-pass.sh`, which reads the git-ignored
 `ansible/.vault-pass` and **mints a random one on first use** — so `ansible-vault create` and
-every later run just work. **Back `.vault-pass` up**; on a second control machine, copy it over
-**before** the first run there (or pre-seed it with a team-shared password — whatever `.vault-pass`
-holds when the vault is created is the vault's password).
+every later run just work. `vault.yml` and `.vault-pass` are a **git-ignored, local-only pair**:
+back the pair up out-of-band, and copy **both files** to a second control machine before its first
+run (or pre-seed `.vault-pass` with a team-shared password — whatever it holds when the vault is
+created is the vault's password). Losing the pair is cheap — delete both, re-create the vault,
+re-run the playbook: that's a PSK rotation. (`.vault-pass` restored without `vault.yml` falls back
+to the dev PSK, and outside `dev` the role refuses the run — loud and safe, not a bug.)
 
-The encrypted `vault.yml` is safe to commit. The role **refuses to run with the dev PSK** unless
+The role **refuses to run with the dev PSK** unless
 `custos_network_env` is `dev` (the default) — uncomment `custos_network_env: prod` in
 `group_vars/custos/main.yml` to arm the gate. PSK-bearing configs land as root-only (`0600`) and
 are excluded from `--diff` output, so the real key never prints.
