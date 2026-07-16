@@ -8,13 +8,22 @@
 - name: Configure the ground-side NAT (STA)
   when: custos_network_role == 'sta'
   block:
+    # custos_network_online comes from "Probe the apt mirror" in main.yml (tagged
+    # nat, so it also runs under `--tags nat`) — no reachability, no apt hang.
     - name: Install nftables
       ansible.builtin.apt:
         name: nftables
         state: present
         update_cache: true
         cache_valid_time: 3600
-      when: ansible_os_family == 'Debian'   # S4 — offline/non-Debian boards must pre-stage
+      when: custos_network_online   # S4 — offline/non-Debian boards must pre-stage
+
+    - name: Verify pre-staged nft (offline)
+      ansible.builtin.command:
+        argv: [sh, -c, "command -v nft"]
+      changed_when: false
+      check_mode: false
+      when: not custos_network_online
 
     - name: Enable IPv4 forwarding persistently
       ansible.builtin.copy:

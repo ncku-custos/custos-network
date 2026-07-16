@@ -38,6 +38,14 @@ custos_network_wifi_psk: "{{ vault_wifi_psk | default('custos-dev-changeme') }}"
 # (see "Validate role parameters"). Arm it in group_vars/custos/main.yml.
 custos_network_env: dev
 
+# apt reachability probe (see "Probe the apt mirror" in tasks/main.yml): one short
+# TCP connect before any apt task, so an offline box — the normal state of a bench
+# drone without the NAT uplink — skips apt instead of hanging on mirror timeouts.
+# Probing by name (not IP) also proves DNS, which apt needs anyway.
+custos_network_apt_probe_host: archive.ubuntu.com
+custos_network_apt_probe_port: 80
+custos_network_apt_probe_timeout: 5
+
 # Per-host values provided in group_vars (intentionally not defaulted, so the role
 # asserts they are set):
 #   custos_network_role:     ap | sta

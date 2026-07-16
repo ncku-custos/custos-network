@@ -114,7 +114,9 @@ yet — expected, not a bug.
 `ansible-playbook -i 'localhost,' -c local site.yml -e custos_network_target=all -e custos_network_role=ap`
 (needs `ansible` on the box; for the STA side also pass `-e custos_network_ap_bssid=<mac>`). The role apt-installs
 `hostapd`/`wpasupplicant`/`iw`/`rfkill` on Debian-family hosts; pre-stage them on offline or
-non-Debian boards.
+non-Debian boards. Before any apt task the role probes the mirror with one short TCP connect
+(`custos_network_apt_probe_host`, 5 s) — an offline box skips apt instead of hanging on mirror
+timeouts, and the run fails fast if the tools aren't pre-staged.
 
 ## Field setup (laptop ground station + phone uplink)
 

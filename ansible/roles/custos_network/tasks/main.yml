@@ -47,6 +47,33 @@
       over a management path (see README "Provision"), or set
       custos_network_allow_flight_mgmt=true if you accept the drop.
 
+# apt against an unreachable mirror does not fail fast — apt-get update grinds
+# through per-mirror timeouts and retries for minutes, and a bench box without the
+# NAT uplink has no internet by design. One short TCP connect gates every apt task
+# instead. bash's /dev/tcp keeps it dependency-free, and the outer `timeout` also
+# bounds a hanging DNS lookup (which wait_for's timeout would not). check_mode:
+# false so a --check run still probes (read-only) and keeps apt's would-change
+# reporting. Tagged nat: nat.yml's apt task reuses the fact.
+- name: Probe the apt mirror
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - "{{ custos_network_apt_probe_timeout }}"
+      - bash
+      - -c
+      - "exec 3<>/dev/tcp/{{ custos_network_apt_probe_host }}/{{ custos_network_apt_probe_port }}"
+  register: custos_network_apt_probe
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when: ansible_os_family == 'Debian'
+  tags: [nat]
+
+- name: Record apt reachability
+  ansible.builtin.set_fact:
+    custos_network_online: "{{ custos_network_apt_probe.rc | default(1) == 0 }}"
+  tags: [nat]
+
 - name: Install Wi-Fi link packages
   ansible.builtin.apt:
     name:
@@ -57,7 +84,37 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
-  when: ansible_os_family == 'Debian'   # S4 — offline/non-Debian boards must pre-stage these
+  when: custos_network_online   # S4 — offline/non-Debian boards must pre-stage these
+
+# Offline: apt was skipped, so the tools must already be on the box (README
+# "Serial-only box" pre-stage note). Fail here with the missing list, not minutes
+# later when a unit can't find its binary. Explicit loop: multi-arg `command -v`
+# exit codes differ between dash and bash — neither means "all found".
+- name: Check for pre-staged Wi-Fi tooling (offline)
+  ansible.builtin.command:
+    argv:
+      - sh
+      - -c
+      - >-
+        missing=; for c in hostapd wpa_supplicant iw rfkill; do
+        command -v "$c" >/dev/null 2>&1 || missing="$missing $c"; done;
+        echo "missing:$missing"; test -z "$missing"
+  register: custos_network_prestage
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  when: not custos_network_online
+
+- name: Refuse to continue offline without pre-staged tooling
+  ansible.builtin.assert:
+    that:
+      - custos_network_online or custos_network_prestage.rc | default(0) == 0
+    fail_msg: >-
+      No route to {{ custos_network_apt_probe_host }}:{{ custos_network_apt_probe_port }}
+      (probe rc={{ custos_network_apt_probe.rc | default('skipped') }}), so apt was
+      skipped — but not every Wi-Fi tool is pre-staged
+      ({{ custos_network_prestage.stdout | default('') }}). Pre-stage the packages
+      (see README), or bring up an uplink and re-run.
 
 # --- Hand the flight interface to networkd: stop NetworkManager and the plain
 # wpa_supplicant from grabbing it. Only the flight NIC is unmanaged — uplink/mgmt
