@@ -29,9 +29,25 @@ fi
 
 # The regulatory domain is machine-global (all radios, uplink included) — only set
 # it when it actually differs, so boots/re-runs don't kick other radios' links.
+#
+# `iw reg set` is fire-and-forget: the kernel queues the request and applies it
+# asynchronously (it may still be waiting on the regulatory.db firmware load this
+# early in boot). Our only reason to exist is the Before=hostapd ordering, so poll
+# until the domain is actually applied — otherwise hostapd starts against world
+# domain 00, where ch149 is no-IR, fails "Could not set channel", and exits 0
+# (observed on the nt98690 drone board, t≈10s after boot).
 current="$(iw reg get 2>/dev/null | awk '/^country/{print substr($2,1,2); exit}')" || true
 if [ "$current" != "$COUNTRY" ]; then
   iw reg set "$COUNTRY"
+  for _ in $(seq 1 50); do
+    current="$(iw reg get 2>/dev/null | awk '/^country/{print substr($2,1,2); exit}')" || true
+    [ "$current" = "$COUNTRY" ] && break
+    sleep 0.2
+  done
+  if [ "$current" != "$COUNTRY" ]; then
+    echo "custos-wifi-tune: reg domain still '$current' after 10s (wanted $COUNTRY)" >&2
+    exit 1
+  fi
 fi
 iw dev "$IFACE" set power_save off
 

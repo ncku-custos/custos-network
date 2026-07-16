@@ -6,6 +6,8 @@ After=sys-subsystem-net-devices-{{ custos_network_flight_iface }}.device
 # Radio must be in TW + power-save off before the AP comes up.
 Wants=custos-wifi-tune@{{ custos_network_flight_iface }}.service
 After=custos-wifi-tune@{{ custos_network_flight_iface }}.service
+# Paired with Restart=always below: never give up on bringing the AP back.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -16,7 +18,11 @@ Type=simple
 # comes up). A real soft-block still surfaces as a loud hostapd failure.
 ExecStartPre=-/usr/sbin/rfkill unblock wlan
 ExecStart=/usr/sbin/hostapd /etc/hostapd/hostapd.conf
-Restart=on-failure
+# Restart=always, not on-failure: hostapd exits 0 on "Interface initialization
+# failed" (e.g. the channel is still no-IR because the reg domain hasn't been
+# applied yet), so on-failure lets a headless drone stay AP-less until someone
+# logs in. Retry forever — there is no operator in the field.
+Restart=always
 RestartSec=2
 
 [Install]
