@@ -48,6 +48,14 @@
     name: "wpa_supplicant@{{ custos_network_flight_iface }}.service"
     state: restarted
 
+# Reopens /var/log/journal on the persistent bind mount (journal.yml) and picks
+# up journald.conf.d changes. Safe mid-run: journald keeps its stream sockets
+# across restart (fd store), so at most a moment of messages is at risk.
+- name: Restart systemd-journald
+  ansible.builtin.systemd:
+    name: systemd-journald.service
+    state: restarted
+
 # Scoped to our file — `sysctl --system` would re-apply every file on the box.
 - name: Apply custos sysctl
   ansible.builtin.command:

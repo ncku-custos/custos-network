@@ -319,6 +319,10 @@
     state: started
   when: custos_network_role == 'sta'
 
+# --- Persistent journal on boards with a boot-wiped tmpfs /var/log (self-detecting no-op elsewhere) ---
+- name: Persist the journal across reboots
+  ansible.builtin.import_tasks: journal.yml
+
 # --- Optional ground→internet NAT uplink (off by default; the bare link is unchanged) ---
 # import_tasks (static) so the tag and condition propagate to every imported task.
 - name: Ground NAT uplink (custos_network_enable_nat)

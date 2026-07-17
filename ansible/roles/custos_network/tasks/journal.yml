@@ -1,0 +1,94 @@
+---
+# Persistent journal on boards whose /var/log is a boot-wiped tmpfs.
+#
+# The nt98690 vendor image mounts /var/log as a 32 MB tmpfs (eMMC-wear
+# protection), so `journalctl --list-boots` only ever shows the current boot —
+# a flaky bring-up can never be diagnosed after the reboot that cleared it.
+# Bind an eMMC-backed directory over /var/log/journal so the journal survives;
+# everything else in /var/log stays on the tmpfs, so the wear the vendor was
+# avoiding stays avoided (bounded further by the SystemMaxUse cap below).
+#
+# Self-detecting: on a normal persistent /var/log (the ground laptop) this
+# whole file is a no-op.
+
+# Probed with findmnt, not ansible_facts.mounts — the setup module only reports
+# device-backed filesystems, so a tmpfs never appears there. rc!=0 (not a mount
+# point) leaves stdout empty, which reads as "not tmpfs".
+- name: Probe the /var/log filesystem type
+  ansible.builtin.command:
+    cmd: findmnt -no FSTYPE /var/log
+  register: custos_network_varlog_fs
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
+- name: Record whether /var/log is a boot-wiped tmpfs
+  ansible.builtin.set_fact:
+    custos_network_varlog_tmpfs: "{{ (custos_network_varlog_fs.stdout | default('')) | trim == 'tmpfs' }}"
+
+- name: Persist the journal under the tmpfs /var/log
+  when: custos_network_varlog_tmpfs | bool
+  block:
+    # Group + setgid match what systemd-tmpfiles gives /var/log/journal, so
+    # journald's ACL handling and `journalctl` group access work unchanged.
+    - name: Create the eMMC-backed journal directory
+      ansible.builtin.file:
+        path: /var/journal-persist
+        state: directory
+        owner: root
+        group: systemd-journal
+        mode: "2755"
+
+    - name: Check whether the journal bind mount is already active
+      ansible.builtin.command:
+        cmd: mountpoint -q /var/log/journal
+      register: custos_network_journal_mounted
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    # First run only (bind not active yet): copy the current boot's journal
+    # off the tmpfs so today's history survives the switch instead of being
+    # shadowed by the mount. Journald keeps its open files on the tmpfs until
+    # the restart below; a slightly-torn copy is fine — journalctl tolerates it.
+    # Best-effort (failed_when: false): cp -a exits 1 AFTER copying the data
+    # when the rootfs can't take the journal's ACLs (vendor kernel without
+    # ext4 ACL support); base owner/group/mode still land, which is all
+    # journalctl needs. A failed seed loses only today's history.
+    - name: Seed persistent storage with the current boot's journal
+      ansible.builtin.shell:
+        cmd: if [ -d /var/log/journal ]; then cp -a /var/log/journal/. /var/journal-persist/; fi
+      when: custos_network_journal_mounted.rc != 0
+      failed_when: false
+      changed_when: false
+
+    - name: Install the var-log-journal bind mount unit
+      ansible.builtin.copy:
+        src: var-log-journal.mount
+        dest: /etc/systemd/system/var-log-journal.mount
+        mode: "0644"
+      notify: Reload systemd daemon
+
+    # On change, journald must be restarted to reopen /var/log/journal on the
+    # new backing store — until then it keeps writing to the shadowed tmpfs
+    # files. The handler runs at end of play; nothing later depends on it.
+    - name: Enable and start the journal bind mount
+      ansible.builtin.systemd:
+        name: var-log-journal.mount
+        enabled: true
+        state: started
+        daemon_reload: true
+      notify: Restart systemd-journald
+
+    - name: Ensure journald conf.d exists
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Cap persistent journal size
+      ansible.builtin.copy:
+        src: 50-custos-journal.conf
+        dest: /etc/systemd/journald.conf.d/50-custos-journal.conf
+        mode: "0644"
+      notify: Restart systemd-journald

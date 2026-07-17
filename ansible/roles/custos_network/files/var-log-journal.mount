@@ -1,0 +1,22 @@
+[Unit]
+Description=Persistent journal storage under a tmpfs /var/log
+# Vendor images (nt98690 drone board) mount /var/log as a boot-wiped tmpfs to
+# spare the eMMC — so every journal dies with exactly the reboot it would have
+# explained. Bind an eMMC-backed directory over /var/log/journal so journald's
+# boot-time flush lands on real storage.
+#
+# Ordering is free: systemd-journal-flush.service carries
+# RequiresMountsFor=/var/log/journal, which pulls in this unit before the
+# runtime journal is flushed. We only need to mount after the tmpfs itself.
+# systemd creates the mount point on the fresh tmpfs; the What= directory is
+# provisioned by the custos_network role (journal.yml).
+RequiresMountsFor=/var/log
+
+[Mount]
+What=/var/journal-persist
+Where=/var/log/journal
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
