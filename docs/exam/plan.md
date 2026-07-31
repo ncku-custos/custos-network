@@ -58,7 +58,7 @@ workflow, and docs (README, rationale, intro, D2 diagrams).
 
 ## 2. Exam tracks
 
-Nine tracks. Each lists what to examine, the key files, the questions to
+Ten tracks. Each lists what to examine, the key files, the questions to
 answer, and what a finding looks like.
 
 ### Track A — Boot sequence & race conditions (reliability core)
@@ -269,8 +269,9 @@ Questions:
 
 ### Track H — CI & automation gap matrix (do last; pure aggregation)
 
-For every invariant catalogued by Tracks A–G, answer: could *any* current CI
-step catch its regression? Current CI = ansible-lint (production profile) +
+For every invariant catalogued by Tracks A–G and J, answer: could *any*
+current CI step catch its regression — and if not CI, is it at least
+field-detectable per the Track J signal inventory? Current CI = ansible-lint (production profile) +
 syntax check. Known-absent guards to size: shellcheck job; template-render
 step (the Track D harness is a ready-made seed) with `nft -c`,
 `systemd-analyze verify`, `udevadm verify`; `ansible-playbook --check`
@@ -299,6 +300,63 @@ gap protecting an S1 behavior."
   or behavior gets checked against the tree. Drift with operational blast
   radius (e.g. a doc implying units are boot-enabled, tempting an operator
   to "fix" `enabled: false` and reintroduce the 90 s stall) is a finding.
+
+### Track J — Field observability & monitoring tooling
+
+The repo's hardest failures are niche and machine-specific — the RTL8822BU
+>900-byte black hole, mid-flight USB re-enumeration, crash loops whose
+period exceeds any one-shot check, the add→move race that reproduces "maybe
+half the time." These cannot be caught on a bench day alone; they need field
+data. Everything else in this exam is point-in-time (an operator-invoked
+health check, a bench runbook). This track audits whether the system, as
+provisioned, would **capture enough data in the field to detect and diagnose
+those failures after the fact** — and produces the requirements list for the
+monitoring tooling iteration 2 builds.
+
+Files: `files/50-custos-journal.conf`, `tasks/journal.yml`,
+`files/var-log-journal.mount`, logging-related directives in every unit
+file, `templates/hostapd.conf.j2` (logger levels),
+`templates/wpa_supplicant.conf.j2`, `scripts/health-check.sh`,
+`README.md` (the Gotchas section is the incident source list).
+
+Questions:
+
+- **Signal inventory** (the core deliverable): for every field incident and
+  `HW-ONLY` invariant catalogued by Tracks A/B, name the signal that would
+  have detected or diagnosed it in the field — udev event log for the
+  rename race, periodic large-ping for the black hole, `NRestarts` for
+  crash loops, networkd events for carrier bounces, `iw reg get` at
+  association time for the regulatory race, `iw station dump`
+  RSSI/retry/MCS trends for RF degradation. Classify each incident:
+  `diagnosable-from-current-logs` / `needs-new-probe` / `undetectable`.
+- **Log content sufficiency**: are default daemon verbosities (hostapd
+  logger settings, wpa_supplicant, networkd, udev) enough for post-incident
+  forensics from the persisted journal? The journal work made logs
+  *survive* reboot; nothing has audited whether the right things are *in*
+  them.
+- **Journal retention vs incident window**: can the 50 M `SystemMaxUse` cap
+  evict the incident before anyone harvests it — especially if a crash loop
+  is spamming the journal at the time? Are rate-limit settings coherent
+  with that cap?
+- **Point-in-time → continuous**: which health-check assertions should
+  become on-box continuous monitors (systemd timer + small recorder), and —
+  critically — can they run without violating the subtraction thesis: no
+  off-channel scans, no TCP on the flight link, bounded CPU, bounded eMMC
+  writes? A monitor that adds jitter or wear is itself an S2 finding.
+- **Ground-side monitoring as the primary channel**: when a drone-side unit
+  permanently fails in flight (start-limit hit, tune timeout), there is no
+  operator-visible signal on the drone. Can the ground station carry the
+  monitoring burden instead — continuous RTT/loss trend, periodic
+  `-s 1000 -M do` probe, `iw station dump` signal recording — since it has
+  the disk, power, and an operator? What can only be observed drone-side?
+- **Harvest path**: is there any defined procedure to pull journals/metrics
+  off the drone post-flight? (Likely none — that absence is itself a
+  finding.)
+
+Finding shape: "Field incident class X (mid-flight re-enumeration) leaves
+no persisted evidence distinguishable from a clean reboot; monitoring gap;
+S2 (verification gap for an S1 behavior); fix sketch: udev-event logger +
+link-flap recorder on a timer, ground-side RTT trend log."
 
 ## 3. Methodology
 
@@ -355,6 +413,11 @@ precondition to bite).
    findings are disputed.
 3. **CI coverage matrix** — appendix in findings.md: invariant ×
    {ansible-lint, syntax-check, each proposed guard}.
+4. **Field signal inventory** — appendix in findings.md (from Track J):
+   each field-incident class × the signal that detects/diagnoses it ×
+   current status (`diagnosable-from-current-logs` / `needs-new-probe` /
+   `undetectable`). This is the requirements document for the iteration-2
+   monitoring toolkit.
 
 `docs/exam/` keeps audit artifacts versioned next to the docs they
 cross-reference and out of the role tree that ansible-lint scans.
@@ -374,12 +437,15 @@ candidates: tune-timeout-vs-`Wants=` semantics, start-limit vs
 | 4 | B — Failure modes & recovery | 1 day |
 | 5 | C — Idempotency & convergence | 0.75 day |
 | 6 | F — Health-check coverage | 0.5 day |
-| 7 | E — Secrets & vault | 0.25 day |
-| 8 | I — Performance & docs drift | 0.5 day |
-| 9 | H — CI gap matrix | 0.25 day |
+| 7 | J — Field observability & monitoring | 0.5 day |
+| 8 | E — Secrets & vault | 0.25 day |
+| 9 | I — Performance & docs drift | 0.5 day |
+| 10 | H — CI gap matrix | 0.25 day |
 | — | Register write-up & severity calibration pass | 0.5 day |
 
-Total: ~5.5 focused days.
+Total: ~6 focused days. Track J runs right after F because it needs the
+A/B invariant catalog and F's inventory of what the health check already
+observes.
 
 ## 7. Iteration 2 (what the exam feeds — sketch only)
 
@@ -393,6 +459,13 @@ Total: ~5.5 focused days.
 - **health-check.sh hardening**: on-box probes the exam identifies (large
   ping for the MTU black hole, `systemctl show -p NRestarts` crash-loop
   detection), machine-readable output.
+- **Field monitoring toolkit** (from the Track J signal inventory): on-box
+  continuous monitors under the subtraction-thesis constraints (link-flap
+  recorder, udev-event logger, `NRestarts` alarm on a timer); ground-side
+  link-quality recorder (RTT/loss trend, periodic large-ping,
+  `iw station dump` capture); a post-flight journal/metrics harvest
+  procedure; journal retention settings sized so incidents survive until
+  harvest.
 - **Bench-day runbook**: the collected `HW-ONLY` procedures.
 - **Docs refresh**: Track I drift findings applied to README, rationale, and
   diagrams.
